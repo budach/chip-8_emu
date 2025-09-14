@@ -20,7 +20,6 @@ class C8Interpreter:
         self.sound_timer = 0  # 60Hz timer, max 255
         self.stack = []  # stack for subroutine calls
         self.keys = array("B", (0 for _ in range(16)))  # keypad with 16 keys
-        self.last_timer_update = time.monotonic()
         self.prev_keys = array("B", (0 for _ in range(16)))  # previous frame key states
 
         # Key mapping for Chip-8 keys
@@ -95,7 +94,7 @@ class C8Interpreter:
             self.memory[0x50 + i * 5 + 3] = char_array[3]
             self.memory[0x50 + i * 5 + 4] = char_array[4]
 
-    def emulate_cycle(self):
+    def emulate_instruction(self):
         opcode = (self.memory[self.pc] << 8) | self.memory[self.pc + 1]
         self.pc += 2
 
@@ -423,34 +422,36 @@ class C8Interpreter:
                 self.keys[chip_key] = 1
 
     def update_timers(self):
-        # as long as delay_timer or sound_timer is > 0
-        # decrement them by 1 every 1/60th of a second
-        current_time = time.monotonic()
-        delta_time = current_time - self.last_timer_update
-
-        n_decrements = int(delta_time / (1 / 60))
-        if n_decrements > 0:
-            self.last_timer_update += n_decrements * (1 / 60)
-            if self.delay_timer > 0:
-                self.delay_timer = max(0, self.delay_timer - n_decrements)
-            if self.sound_timer > 0:
-                self.sound_timer = max(0, self.sound_timer - n_decrements)
+        if self.delay_timer > 0:
+            self.delay_timer -= 1
+        if self.sound_timer > 0:
+            self.sound_timer -= 1
 
 
 def main(rom_file):
     interpreter = C8Interpreter(rom_file)
 
+    INSTR_PER_FRAME = 11  # 11 is a good default
+    last_time = time.monotonic()
+
     while interpreter.running:
-        interpreter.clock.tick(60)  # Cap at 60 FPS
-
-        for _ in range(12):
-            interpreter.emulate_cycle()
-            if interpreter.draw_flag:
-                interpreter.draw_to_screen()
-                break
-
         interpreter.handle_input()
         interpreter.update_timers()
+
+        for _ in range(INSTR_PER_FRAME):
+            interpreter.emulate_instruction()
+
+        if interpreter.draw_flag:
+            interpreter.draw_to_screen()
+
+        interpreter.clock.tick(60)
+
+        current_time = time.monotonic()
+        if current_time - last_time >= 2.5:
+            fps = round(interpreter.clock.get_fps(), 2)
+            mips = round(INSTR_PER_FRAME * fps / 1_000_000, 2)
+            pygame.display.set_caption(f"FPS: {fps} | MIPS: {mips}")
+            last_time = current_time
 
 
 if __name__ == "__main__":
