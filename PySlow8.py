@@ -374,28 +374,24 @@ class C8Interpreter:
         gfx = self.gfx
         mem = self.memory
         I = self.I
-        V = self.V
 
-        V[0xF] = 0
+        collision = 0
         x %= 64
         y %= 32
+        max_rows = min(n, 32 - y)
+        max_cols = min(8, 64 - x)
 
-        for row in range(n):
+        for row in range(max_rows):
             y_coord = y + row
-            if y_coord >= 32:
-                continue
-
             sprite_byte = mem[I + row]
 
-            for col in range(8):
-                if x + col >= 64 or ((sprite_byte >> (7 - col)) & 1) == 0:
-                    continue
+            for col in range(max_cols):
+                if (sprite_byte >> (7 - col)) & 1:
+                    idx = x + col + (y_coord * 64)
+                    collision |= gfx[idx]
+                    gfx[idx] ^= 1
 
-                idx = x + col + (y_coord * 64)
-                if gfx[idx]:
-                    V[0xF] = 1
-                gfx[idx] ^= 1
-
+        self.V[0xF] = 1 if collision else 0
         self.draw_flag = True
 
     def handle_input(self):
