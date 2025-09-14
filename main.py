@@ -46,7 +46,6 @@ class C8Interpreter:
         pygame.init()
         self.scale = 24
         self.screen = pygame.display.set_mode((64 * self.scale, 32 * self.scale))
-        self.clock = pygame.time.Clock()
 
         # prepare memory
         self._load_rom(rom_file)
@@ -431,10 +430,15 @@ class C8Interpreter:
 def main(rom_file):
     interpreter = C8Interpreter(rom_file)
 
+    FPS_TARGET = 60
+    FRAME_TIME_TARGET = 1 / FPS_TARGET
     INSTR_PER_FRAME = 11  # 11 is a good default
-    last_time = time.monotonic()
+
+    last_title_update = time.time()
 
     while interpreter.running:
+        start_time = time.time()
+
         interpreter.handle_input()
         interpreter.update_timers()
 
@@ -444,14 +448,21 @@ def main(rom_file):
         if interpreter.draw_flag:
             interpreter.draw_to_screen()
 
-        interpreter.clock.tick(60)
+        frame_time = time.time() - start_time
+        sleep_time = max(0, FRAME_TIME_TARGET - frame_time)
 
-        current_time = time.monotonic()
-        if current_time - last_time >= 2.5:
-            fps = round(interpreter.clock.get_fps(), 2)
-            mips = round(INSTR_PER_FRAME * fps / 1_000_000, 2)
-            pygame.display.set_caption(f"FPS: {fps} | MIPS: {mips}")
-            last_time = current_time
+        time.sleep(sleep_time)
+
+        current_time = time.time()
+        if current_time - last_title_update >= 2.0:
+            real_fps = 1 / (frame_time + sleep_time)
+            pygame.display.set_caption(
+                "FPS: {:.2f} | MIPS: {:.2f}".format(
+                    real_fps,
+                    (INSTR_PER_FRAME * real_fps) / 1000000,
+                )
+            )
+            last_title_update = current_time
 
 
 if __name__ == "__main__":
