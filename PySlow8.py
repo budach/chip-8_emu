@@ -439,8 +439,8 @@ def main(rom_file, system_info):
 
         frame_time = time.time() - start_time
         sleep_time = max(0, FRAME_TIME_TARGET - frame_time)
-
-        time.sleep(sleep_time)
+        if sleep_time > 0:
+            time.sleep(sleep_time)
 
         current_time = time.time()
         if current_time - last_title_update >= 2.0:
