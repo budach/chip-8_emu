@@ -386,13 +386,22 @@ class C8Interpreter:
         gfx = self.gfx
         self.V[0xF] = 0
 
+        x %= 64
+        y %= 32
+
         for row in range(n):
             sprite_byte = self.memory[self.I + row]
+            y_coord = y + row
+            if y_coord >= 32:
+                continue
+
             for col in range(8):
+                x_coord = x + col
+                if x_coord >= 64:
+                    continue
+
                 sprite_pixel = (sprite_byte >> (7 - col)) & 1
                 if sprite_pixel:
-                    x_coord = (x + col) % 64
-                    y_coord = (y + row) % 32
                     idx = x_coord + (y_coord * 64)
                     if gfx[idx]:
                         self.V[0xF] = 1
