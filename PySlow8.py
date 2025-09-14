@@ -1,28 +1,28 @@
 import sys
 import time
-from array import array
 from random import randint
 
 import pygame
+from cpuinfo import get_cpu_info
 
 
 class C8Interpreter:
 
     def __init__(self, rom_file):
         self.running = True
-        self.memory = array("B", (0 for _ in range(4096)))  # 4KB memory
-        self.V = array("B", (0 for _ in range(16)))  # registers
+        self.memory = [0] * 4096  # 4KB memory
+        self.V = [0] * 16  # registers
         self.I = 0  # index register
         self.pc = 0x200  # program counter starts at 0x200 in memory
-        self.gfx = array("B", (0 for _ in range(64 * 32)))  # graphics
+        self.gfx = [0] * (64 * 32)  # graphics
         self.draw_flag = False
         self.delay_timer = 0  # 60Hz timer, max 255
         self.sound_timer = 0  # 60Hz timer, max 255
         self.stack = []  # stack for subroutine calls
-        self.keys = array("B", (0 for _ in range(16)))  # keypad with 16 keys
-        self.prev_keys = array("B", (0 for _ in range(16)))  # previous frame key states
+        self.keys = [0] * 16  # keypad with 16 keys
+        self.prev_keys = [0] * 16  # previous frame key states
 
-        # Key mapping for Chip-8 keys
+        # key mapping for Chip-8 keys
         self.mapping = {
             pygame.K_1: 0x1,
             pygame.K_2: 0x2,
@@ -61,7 +61,7 @@ class C8Interpreter:
         if len(rom) > len(self.memory) - 0x200:
             raise ValueError("ROM too large to fit in memory")
 
-        # Load ROM into memory starting at 0x200
+        # load ROM into memory starting at 0x200
         for i in range(len(rom)):
             self.memory[0x200 + i] = rom[i]
 
@@ -85,7 +85,7 @@ class C8Interpreter:
             "F": (0xF0, 0x80, 0xF0, 0x80, 0x80),
         }
 
-        # Load fontset into memory starting at 0x50
+        # load fontset into memory starting at 0x50
         for i, char_array in enumerate(fontset.values()):
             self.memory[0x50 + i * 5 + 0] = char_array[0]
             self.memory[0x50 + i * 5 + 1] = char_array[1]
@@ -103,7 +103,7 @@ class C8Interpreter:
                 if opcode == 0x00E0:
                     # opcode 0x00E0
                     # clear the display
-                    self.gfx = array("B", (0 for _ in range(64 * 32)))
+                    self.gfx = [0] * (64 * 32)
                     self.draw_flag = True
                 elif opcode == 0x00EE:
                     # opcode 0x00EE
@@ -404,8 +404,8 @@ class C8Interpreter:
                 self.running = False
 
         # Save current keys as previous before updating
-        self.prev_keys = array("B", self.keys)
-        self.keys = array("B", (0 for _ in range(16)))
+        self.prev_keys = self.keys[:]
+        self.keys = [0] * 16
         pressed = pygame.key.get_pressed()
         for key, chip_key in self.mapping.items():
             if pressed[key]:
@@ -418,12 +418,12 @@ class C8Interpreter:
             self.sound_timer -= 1
 
 
-def main(rom_file):
+def main(rom_file, system_info):
     interpreter = C8Interpreter(rom_file)
 
     FPS_TARGET = 60
     FRAME_TIME_TARGET = 1 / FPS_TARGET
-    INSTR_PER_FRAME = 45000  # 11 is a good default
+    INSTR_PER_FRAME = 11  # 11 is a good default
 
     last_title_update = time.time()
 
@@ -448,7 +448,8 @@ def main(rom_file):
         if current_time - last_title_update >= 2.0:
             real_fps = 1 / (frame_time + sleep_time)
             pygame.display.set_caption(
-                "IPF: {} | FPS: {:.2f} | MIPS: {:.2f}".format(
+                "{} | IPF: {} | FPS: {:.2f} | MIPS: {:.2f}".format(
+                    system_info,
                     INSTR_PER_FRAME,
                     real_fps,
                     (INSTR_PER_FRAME * real_fps) / 1000000,
@@ -461,4 +462,10 @@ if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Usage: python main.py <ROM>")
         sys.exit(1)
-    main(sys.argv[1])
+
+    system_info = "Python: {} | CPU: {}".format(
+        sys.version.split()[0],
+        get_cpu_info().get("brand_raw", "Unknown CPU"),
+    )
+
+    main(sys.argv[1], system_info)
