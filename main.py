@@ -434,11 +434,11 @@ def main(rom_file):
     while interpreter.running:
         interpreter.clock.tick(60)  # Cap at 60 FPS
 
-        for _ in range(10):
+        for _ in range(12):
             interpreter.emulate_cycle()
-
-        if interpreter.draw_flag:
-            interpreter.draw_to_screen()
+            if interpreter.draw_flag:
+                interpreter.draw_to_screen()
+                break
 
         interpreter.handle_input()
         interpreter.update_timers()
