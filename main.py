@@ -111,7 +111,6 @@ class C8Interpreter:
                     self.pc = self.stack.pop()
                 else:
                     print(f"Unknown opcode: {opcode:04X}")
-                    return False
 
             case 0x1000:
                 # opcode 0x1NNN
@@ -231,7 +230,6 @@ class C8Interpreter:
 
                     case _:
                         print(f"Unknown opcode: {opcode:04X}")
-                        return False
 
             case 0x9000:
                 # opcode 0x9XY0
@@ -281,7 +279,6 @@ class C8Interpreter:
 
                     case _:
                         print(f"Unknown opcode: {opcode:04X}")
-                        return False
 
             case 0xF000:
 
@@ -324,9 +321,6 @@ class C8Interpreter:
                         # opcode 0xFX29
                         # set I to the location of the sprite for digit VX
                         vx = self.V[(opcode & 0x0F00) >> 8]
-                        if vx < 0 or vx > 15:
-                            print(f"opcode 0xFX29, unknown VX digit: {vx}")
-                            return False
                         self.I = 0x50 + vx * 5  # fontset starts at 0x50
 
                     case 0x0033:
@@ -353,13 +347,9 @@ class C8Interpreter:
 
                     case _:
                         print(f"Unknown opcode: {opcode:04X}")
-                        return False
 
             case _:
                 print(f"Unknown opcode: {opcode:04X}")
-                return False
-
-        return True
 
     def draw_to_screen(self):
         gfx = self.gfx
@@ -382,28 +372,29 @@ class C8Interpreter:
 
     def _draw_sprite_to_internal(self, x, y, n):
         gfx = self.gfx
-        self.V[0xF] = 0
+        mem = self.memory
+        I = self.I
+        V = self.V
 
+        V[0xF] = 0
         x %= 64
         y %= 32
 
         for row in range(n):
-            sprite_byte = self.memory[self.I + row]
             y_coord = y + row
             if y_coord >= 32:
                 continue
 
+            sprite_byte = mem[I + row]
+
             for col in range(8):
-                x_coord = x + col
-                if x_coord >= 64:
+                if x + col >= 64 or ((sprite_byte >> (7 - col)) & 1) == 0:
                     continue
 
-                sprite_pixel = (sprite_byte >> (7 - col)) & 1
-                if sprite_pixel:
-                    idx = x_coord + (y_coord * 64)
-                    if gfx[idx]:
-                        self.V[0xF] = 1
-                    gfx[idx] ^= 1
+                idx = x + col + (y_coord * 64)
+                if gfx[idx]:
+                    V[0xF] = 1
+                gfx[idx] ^= 1
 
         self.draw_flag = True
 
@@ -432,7 +423,7 @@ def main(rom_file):
 
     FPS_TARGET = 60
     FRAME_TIME_TARGET = 1 / FPS_TARGET
-    INSTR_PER_FRAME = 11  # 11 is a good default
+    INSTR_PER_FRAME = 45000  # 11 is a good default
 
     last_title_update = time.time()
 
@@ -457,7 +448,8 @@ def main(rom_file):
         if current_time - last_title_update >= 2.0:
             real_fps = 1 / (frame_time + sleep_time)
             pygame.display.set_caption(
-                "FPS: {:.2f} | MIPS: {:.2f}".format(
+                "IPF: {} | FPS: {:.2f} | MIPS: {:.2f}".format(
+                    INSTR_PER_FRAME,
                     real_fps,
                     (INSTR_PER_FRAME * real_fps) / 1000000,
                 )
