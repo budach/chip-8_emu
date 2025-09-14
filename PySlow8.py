@@ -423,6 +423,7 @@ def main(rom_file, system_info):
     FRAME_TIME_TARGET = 1 / FPS_TARGET
     INSTR_PER_FRAME = 11  # 11 is a good default
 
+    system_info = system_info + " | IPF: {}".format(INSTR_PER_FRAME)
     last_title_update = time.time()
 
     while interpreter.running:
@@ -445,9 +446,8 @@ def main(rom_file, system_info):
         if current_time - last_title_update >= 2.0:
             real_fps = 1 / (frame_time + sleep_time)
             pygame.display.set_caption(
-                "{} | IPF: {} | FPS: {:.2f} | MIPS: {:.2f}".format(
+                "{} | FPS: {:.2f} | MIPS: {:.2f}".format(
                     system_info,
-                    INSTR_PER_FRAME,
                     real_fps,
                     (INSTR_PER_FRAME * real_fps) / 1000000,
                 )
