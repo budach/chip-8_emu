@@ -502,7 +502,8 @@ if __name__ == "__main__":
         print("Usage: python main.py <ROM>")
         sys.exit(1)
 
-    system_info = "Python: {} | CPU: {}".format(
+    system_info = "{}: {} | CPU: {}".format(
+        "PyPy" if "[PyPy" in sys.version else "CPython",
         sys.version.split()[0],
         get_cpu_info().get("brand_raw", "Unknown CPU"),
     )
