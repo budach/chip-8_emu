@@ -4,3 +4,4 @@ __pycache__/
 *.so
 *.exe
 .vscode/
+rusty8/target/
