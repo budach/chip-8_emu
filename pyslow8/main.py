@@ -15,7 +15,6 @@ class C8Interpreter:
         self.I = 0  # index register
         self.pc = 0x200  # program counter starts at 0x200 in memory
         self.gfx = [0] * (64 * 32)  # graphics
-        self.draw_flag = False
         self.delay_timer = 0  # 60Hz timer, max 255
         self.stack = []  # stack for subroutine calls
         self.keys = [0] * 16  # keypad with 16 keys
@@ -43,7 +42,7 @@ class C8Interpreter:
 
         # pygame setup
         pygame.init()
-        self.scale = 24
+        self.scale = 20
         self.screen = pygame.display.set_mode((64 * self.scale, 32 * self.scale))
 
         # prepare memory
@@ -138,7 +137,6 @@ class C8Interpreter:
                     # opcode 0x00E0
                     # clear the display
                     self.gfx = [0] * (64 * 32)
-                    self.draw_flag = True
                 elif opcode == 0x00EE:
                     # opcode 0x00EE
                     # return from subroutine
@@ -387,7 +385,6 @@ class C8Interpreter:
                     screen.fill(square_color, (x * scale, py, scale, scale))
 
         pygame.display.flip()
-        self.draw_flag = False
 
     def _draw_sprite_to_internal(self, x, y, n, I):
         gfx = self.gfx
@@ -444,7 +441,6 @@ class C8Interpreter:
                         gfx[col + y_coord] ^= 1
 
         self.V[0xF] = 1 if collision else 0
-        self.draw_flag = True
 
     def handle_input(self):
         for event in pygame.event.get():
@@ -481,9 +477,7 @@ def main(rom_file, system_info):
         interpreter.update_timers()
 
         interpreter.emulate_instruction(INSTR_PER_FRAME)
-
-        if interpreter.draw_flag:
-            interpreter.draw_to_screen()
+        interpreter.draw_to_screen()
 
         frame_time = time.time() - start_time
         sleep_time = max(0, FRAME_TIME_TARGET - frame_time)
