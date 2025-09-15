@@ -2,7 +2,7 @@
 
 Install dependencies:
 ```bash
-pip install -r requirements.txt
+pip install -r pyslow8/requirements.txt
 ```
 
 Run a game:
