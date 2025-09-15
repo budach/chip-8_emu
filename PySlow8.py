@@ -110,7 +110,30 @@ class C8Interpreter:
 
             first_nibble = opcode & 0xF000
 
-            if first_nibble == 0x0000:
+            if first_nibble == 0xD000:
+                # opcode 0xDXYN
+                # check most expensive instruction first
+                # draw sprite at coordinate (VX, VY) with height N
+                draw_sprite_to_internal(
+                    x=V[(opcode & 0x0F00) >> 8],
+                    y=V[(opcode & 0x00F0) >> 4],
+                    n=opcode & 0x000F,
+                    I=I,
+                )
+
+            elif first_nibble == 0x4000:
+                # opcode 0x4XNN
+                # skip next instruction if VX != NN
+                if V[(opcode & 0x0F00) >> 8] != (opcode & 0x00FF):
+                    pc += 2
+
+            elif first_nibble == 0x7000:
+                # opcode 0x7XNN
+                # add NN to register VX
+                x = (opcode & 0x0F00) >> 8
+                V[x] = (V[x] + (opcode & 0x00FF)) & 255
+
+            elif first_nibble == 0x0000:
 
                 if opcode == 0x00E0:
                     # opcode 0x00E0
@@ -141,12 +164,6 @@ class C8Interpreter:
                 if V[(opcode & 0x0F00) >> 8] == (opcode & 0x00FF):
                     pc += 2
 
-            elif first_nibble == 0x4000:
-                # opcode 0x4XNN
-                # skip next instruction if VX != NN
-                if V[(opcode & 0x0F00) >> 8] != (opcode & 0x00FF):
-                    pc += 2
-
             elif first_nibble == 0x5000:
                 # opcode 0x5XY0
                 # skip next instruction if VX == VY
@@ -157,12 +174,6 @@ class C8Interpreter:
                 # opcode 0x6XNN
                 # set register VX to NN
                 V[(opcode & 0x0F00) >> 8] = opcode & 0x00FF
-
-            elif first_nibble == 0x7000:
-                # opcode 0x7XNN
-                # add NN to register VX
-                x = (opcode & 0x0F00) >> 8
-                V[x] = (V[x] + (opcode & 0x00FF)) & 255
 
             elif first_nibble == 0x8000:
 
@@ -263,16 +274,6 @@ class C8Interpreter:
                 # opcode 0xCXNN
                 # set VX to random byte AND NN
                 V[(opcode & 0x0F00) >> 8] = randint(0, 255) & opcode & 0x00FF
-
-            elif first_nibble == 0xD000:
-                # opcode 0xDXYN
-                # draw sprite at coordinate (VX, VY) with height N
-                draw_sprite_to_internal(
-                    x=V[(opcode & 0x0F00) >> 8],
-                    y=V[(opcode & 0x00F0) >> 4],
-                    n=opcode & 0x000F,
-                    I=I,
-                )
 
             elif first_nibble == 0xE000:
 
