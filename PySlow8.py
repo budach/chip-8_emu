@@ -384,12 +384,12 @@ class C8Interpreter:
         max_cols = min(8, 64 - x)
 
         for row in range(max_rows):
-            y_coord = y + row
+            y_coord = (y + row) * 64 + x
             sprite_byte = mem[I + row]
 
             for col in range(max_cols):
                 if (sprite_byte >> (7 - col)) & 1:
-                    idx = x + col + (y_coord * 64)
+                    idx = col + y_coord
                     collision |= gfx[idx]
                     gfx[idx] ^= 1
 
