@@ -383,15 +383,49 @@ class C8Interpreter:
         max_rows = min(n, 32 - y)
         max_cols = min(8, 64 - x)
 
-        for row in range(max_rows):
-            y_coord = (y + row) * 64 + x
-            sprite_byte = mem[I + row]
+        if max_cols == 8:
 
-            for col in range(max_cols):
-                if (sprite_byte >> (7 - col)) & 1:
-                    idx = col + y_coord
-                    collision |= gfx[idx]
-                    gfx[idx] ^= 1
+            # fully unrolled loop for performance
+            for row in range(max_rows):
+                y_coord = (y + row) * 64 + x
+                sprite_byte = mem[I + row]
+
+                if sprite_byte & 0x80:
+                    collision |= gfx[y_coord]
+                    gfx[y_coord] ^= 1
+                if sprite_byte & 0x40:
+                    collision |= gfx[1 + y_coord]
+                    gfx[1 + y_coord] ^= 1
+                if sprite_byte & 0x20:
+                    collision |= gfx[2 + y_coord]
+                    gfx[2 + y_coord] ^= 1
+                if sprite_byte & 0x10:
+                    collision |= gfx[3 + y_coord]
+                    gfx[3 + y_coord] ^= 1
+                if sprite_byte & 0x08:
+                    collision |= gfx[4 + y_coord]
+                    gfx[4 + y_coord] ^= 1
+                if sprite_byte & 0x04:
+                    collision |= gfx[5 + y_coord]
+                    gfx[5 + y_coord] ^= 1
+                if sprite_byte & 0x02:
+                    collision |= gfx[6 + y_coord]
+                    gfx[6 + y_coord] ^= 1
+                if sprite_byte & 0x01:
+                    collision |= gfx[7 + y_coord]
+                    gfx[7 + y_coord] ^= 1
+
+        else:
+
+            # same as above but inner loop is not unrolled
+            for row in range(max_rows):
+                y_coord = (y + row) * 64 + x
+                sprite_byte = mem[I + row]
+
+                for col in range(max_cols):
+                    if (sprite_byte >> (7 - col)) & 1:
+                        collision |= gfx[col + y_coord]
+                        gfx[col + y_coord] ^= 1
 
         self.V[0xF] = 1 if collision else 0
         self.draw_flag = True
