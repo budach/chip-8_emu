@@ -93,10 +93,20 @@ class C8Interpreter:
             self.memory[0x50 + i * 5 + 3] = char_array[3]
             self.memory[0x50 + i * 5 + 4] = char_array[4]
 
-    def emulate_instruction(self, how_many=1):
+    def emulate_instruction(self, how_many):
+        # use local references for performance
+        draw_sprite_to_internal = self._draw_sprite_to_internal
+        memory = self.memory
+        keys = self.keys
+        prev_keys = self.prev_keys
+        stack = self.stack
+        V = self.V
+        pc = self.pc
+        I = self.I
+
         for _ in range(how_many):
-            opcode = (self.memory[self.pc] << 8) | self.memory[self.pc + 1]
-            self.pc += 2
+            opcode = (memory[pc] << 8) | memory[pc + 1]
+            pc += 2
 
             first_nibble = opcode & 0xF000
 
@@ -110,49 +120,49 @@ class C8Interpreter:
                 elif opcode == 0x00EE:
                     # opcode 0x00EE
                     # return from subroutine
-                    self.pc = self.stack.pop()
+                    pc = stack.pop()
                 else:
                     print(f"Unknown opcode: {opcode:04X}")
 
             elif first_nibble == 0x1000:
                 # opcode 0x1NNN
                 # jump to address NNN
-                self.pc = opcode & 0x0FFF
+                pc = opcode & 0x0FFF
 
             elif first_nibble == 0x2000:
                 # opcode 0x2NNN
                 # call subroutine at address NNN
-                self.stack.append(self.pc)
-                self.pc = opcode & 0x0FFF
+                stack.append(pc)
+                pc = opcode & 0x0FFF
 
             elif first_nibble == 0x3000:
                 # opcode 0x3XNN
                 # skip next instruction if VX == NN
-                if self.V[(opcode & 0x0F00) >> 8] == (opcode & 0x00FF):
-                    self.pc += 2
+                if V[(opcode & 0x0F00) >> 8] == (opcode & 0x00FF):
+                    pc += 2
 
             elif first_nibble == 0x4000:
                 # opcode 0x4XNN
                 # skip next instruction if VX != NN
-                if self.V[(opcode & 0x0F00) >> 8] != (opcode & 0x00FF):
-                    self.pc += 2
+                if V[(opcode & 0x0F00) >> 8] != (opcode & 0x00FF):
+                    pc += 2
 
             elif first_nibble == 0x5000:
                 # opcode 0x5XY0
                 # skip next instruction if VX == VY
-                if self.V[(opcode & 0x0F00) >> 8] == self.V[(opcode & 0x00F0) >> 4]:
-                    self.pc += 2
+                if V[(opcode & 0x0F00) >> 8] == V[(opcode & 0x00F0) >> 4]:
+                    pc += 2
 
             elif first_nibble == 0x6000:
                 # opcode 0x6XNN
                 # set register VX to NN
-                self.V[(opcode & 0x0F00) >> 8] = opcode & 0x00FF
+                V[(opcode & 0x0F00) >> 8] = opcode & 0x00FF
 
             elif first_nibble == 0x7000:
                 # opcode 0x7XNN
                 # add NN to register VX
                 x = (opcode & 0x0F00) >> 8
-                self.V[x] = (self.V[x] + (opcode & 0x00FF)) & 255
+                V[x] = (V[x] + (opcode & 0x00FF)) & 255
 
             elif first_nibble == 0x8000:
 
@@ -161,43 +171,43 @@ class C8Interpreter:
                 if last_nibble == 0x0000:
                     # opcode 0x8XY0
                     # set VX to VY
-                    self.V[(opcode & 0x0F00) >> 8] = self.V[(opcode & 0x00F0) >> 4]
+                    V[(opcode & 0x0F00) >> 8] = V[(opcode & 0x00F0) >> 4]
 
                 elif last_nibble == 0x0001:
                     # opcode 0x8XY1
                     # set VX to VX OR VY
-                    self.V[(opcode & 0x0F00) >> 8] |= self.V[(opcode & 0x00F0) >> 4]
-                    self.V[0xF] = 0
+                    V[(opcode & 0x0F00) >> 8] |= V[(opcode & 0x00F0) >> 4]
+                    V[0xF] = 0
 
                 elif last_nibble == 0x0002:
                     # opcode 0x8XY2
                     # set VX to VX AND VY
-                    self.V[(opcode & 0x0F00) >> 8] &= self.V[(opcode & 0x00F0) >> 4]
-                    self.V[0xF] = 0
+                    V[(opcode & 0x0F00) >> 8] &= V[(opcode & 0x00F0) >> 4]
+                    V[0xF] = 0
 
                 elif last_nibble == 0x0003:
                     # opcode 0x8XY3
                     # set VX to VX XOR VY
-                    self.V[(opcode & 0x0F00) >> 8] ^= self.V[(opcode & 0x00F0) >> 4]
-                    self.V[0xF] = 0
+                    V[(opcode & 0x0F00) >> 8] ^= V[(opcode & 0x00F0) >> 4]
+                    V[0xF] = 0
 
                 elif last_nibble == 0x0004:
                     # opcode 0x8XY4
                     # add VY to VX, set VF to 1 if overflow, else 0
                     x = (opcode & 0x0F00) >> 8
                     y = (opcode & 0x00F0) >> 4
-                    overflow = (self.V[x] + self.V[y]) > 255
-                    self.V[x] = (self.V[x] + self.V[y]) & 255
-                    self.V[0xF] = overflow
+                    overflow = (V[x] + V[y]) > 255
+                    V[x] = (V[x] + V[y]) & 255
+                    V[0xF] = overflow
 
                 elif last_nibble == 0x0005:
                     # opcode 0x8XY5
                     # set VX to VX - VY, set VF to 0 if underflow, else 1
                     x = (opcode & 0x0F00) >> 8
                     y = (opcode & 0x00F0) >> 4
-                    overflow = self.V[x] >= self.V[y]
-                    self.V[x] = (self.V[x] - self.V[y]) & 255
-                    self.V[0xF] = overflow
+                    overflow = V[x] >= V[y]
+                    V[x] = (V[x] - V[y]) & 255
+                    V[0xF] = overflow
 
                 elif last_nibble == 0x0006:
                     # opcode 0x8XY6
@@ -205,19 +215,19 @@ class C8Interpreter:
                     # set VF to least significant bit of VX before shift
                     x = (opcode & 0x0F00) >> 8
                     y = (opcode & 0x00F0) >> 4
-                    self.V[x] = self.V[y]
-                    overflow = self.V[x] & 0x01
-                    self.V[x] = (self.V[x] >> 1) & 255
-                    self.V[0xF] = overflow
+                    V[x] = V[y]
+                    overflow = V[x] & 0x01
+                    V[x] = (V[x] >> 1) & 255
+                    V[0xF] = overflow
 
                 elif last_nibble == 0x0007:
                     # opcode 0x8XY7
                     # set VX to VY - VX, set VF to 0 if underflow, else 1
                     x = (opcode & 0x0F00) >> 8
                     y = (opcode & 0x00F0) >> 4
-                    overflow = self.V[y] >= self.V[x]
-                    self.V[x] = (self.V[y] - self.V[x]) & 255
-                    self.V[0xF] = overflow
+                    overflow = V[y] >= V[x]
+                    V[x] = (V[y] - V[x]) & 255
+                    V[0xF] = overflow
 
                 elif last_nibble == 0x000E:
                     # opcode 0x8XYE
@@ -225,10 +235,10 @@ class C8Interpreter:
                     # set VF to most significant bit of VX before shift
                     x = (opcode & 0x0F00) >> 8
                     y = (opcode & 0x00F0) >> 4
-                    self.V[x] = self.V[y]
-                    overflow = (self.V[x] & 0x80) >> 7
-                    self.V[x] = (self.V[x] << 1) & 255
-                    self.V[0xF] = overflow
+                    V[x] = V[y]
+                    overflow = (V[x] & 0x80) >> 7
+                    V[x] = (V[x] << 1) & 255
+                    V[0xF] = overflow
 
                 else:
                     print(f"Unknown opcode: {opcode:04X}")
@@ -236,31 +246,32 @@ class C8Interpreter:
             elif first_nibble == 0x9000:
                 # opcode 0x9XY0
                 # skip next instruction if VX != VY
-                if self.V[(opcode & 0x0F00) >> 8] != self.V[(opcode & 0x00F0) >> 4]:
-                    self.pc += 2
+                if V[(opcode & 0x0F00) >> 8] != V[(opcode & 0x00F0) >> 4]:
+                    pc += 2
 
             elif first_nibble == 0xA000:
                 # opcode 0xANNN
                 # set index register I to NNN
-                self.I = opcode & 0x0FFF
+                I = opcode & 0x0FFF
 
             elif first_nibble == 0xB000:
                 # opcode 0xBNNN
                 # jump to address NNN + V0
-                self.pc = (opcode & 0x0FFF) + self.V[0]
+                pc = (opcode & 0x0FFF) + V[0]
 
             elif first_nibble == 0xC000:
                 # opcode 0xCXNN
                 # set VX to random byte AND NN
-                self.V[(opcode & 0x0F00) >> 8] = randint(0, 255) & opcode & 0x00FF
+                V[(opcode & 0x0F00) >> 8] = randint(0, 255) & opcode & 0x00FF
 
             elif first_nibble == 0xD000:
                 # opcode 0xDXYN
                 # draw sprite at coordinate (VX, VY) with height N
-                self._draw_sprite_to_internal(
-                    x=self.V[(opcode & 0x0F00) >> 8],
-                    y=self.V[(opcode & 0x00F0) >> 4],
+                draw_sprite_to_internal(
+                    x=V[(opcode & 0x0F00) >> 8],
+                    y=V[(opcode & 0x00F0) >> 4],
                     n=opcode & 0x000F,
+                    I=I,
                 )
 
             elif first_nibble == 0xE000:
@@ -270,14 +281,14 @@ class C8Interpreter:
                 if nibbles == 0x009E:
                     # opcode 0xEX9E
                     # skip next instruction if key with value VX is pressed
-                    if self.keys[self.V[(opcode & 0x0F00) >> 8]]:
-                        self.pc += 2
+                    if keys[V[(opcode & 0x0F00) >> 8]]:
+                        pc += 2
 
                 elif nibbles == 0x00A1:
                     # opcode 0xEXA1
                     # skip next instruction if key with value VX is not pressed
-                    if not self.keys[self.V[(opcode & 0x0F00) >> 8]]:
-                        self.pc += 2
+                    if not keys[V[(opcode & 0x0F00) >> 8]]:
+                        pc += 2
 
                 else:
                     print(f"Unknown opcode: {opcode:04X}")
@@ -289,69 +300,74 @@ class C8Interpreter:
                 if nibbles == 0x0007:
                     # opcode 0xFX07
                     # set VX to value of delay timer
-                    self.V[(opcode & 0x0F00) >> 8] = self.delay_timer
+                    V[(opcode & 0x0F00) >> 8] = self.delay_timer
 
                 elif nibbles == 0x000A:
                     # opcode 0xFX0A
                     # wait for a key release, store the value in VX
                     key_pressed = False
                     for i in range(16):
-                        if self.prev_keys[i] == 1 and not self.keys[i]:
-                            self.V[(opcode & 0x0F00) >> 8] = i
+                        if prev_keys[i] == 1 and not keys[i]:
+                            V[(opcode & 0x0F00) >> 8] = i
                             key_pressed = True
                             break
                     if not key_pressed:
-                        self.pc -= 2
+                        pc -= 2
 
                 elif nibbles == 0x0015:
                     # opcode 0xFX15
                     # set delay timer to VX
-                    self.delay_timer = self.V[(opcode & 0x0F00) >> 8]
+                    self.delay_timer = V[(opcode & 0x0F00) >> 8]
 
                 elif nibbles == 0x0018:
                     # opcode 0xFX18
                     # set sound timer to VX
-                    self.sound_timer = self.V[(opcode & 0x0F00) >> 8]
+                    self.sound_timer = V[(opcode & 0x0F00) >> 8]
 
                 elif nibbles == 0x001E:
                     # opcode 0xFX1E
                     # add VX to I
                     x = (opcode & 0x0F00) >> 8
-                    self.I = (self.I + self.V[x]) & 0x0FFF
+                    I = (I + V[x]) & 0x0FFF
 
                 elif nibbles == 0x0029:
                     # opcode 0xFX29
                     # set I to the location of the sprite for digit VX
-                    vx = self.V[(opcode & 0x0F00) >> 8]
-                    self.I = 0x50 + vx * 5  # fontset starts at 0x50
+                    vx = V[(opcode & 0x0F00) >> 8]
+                    I = 0x50 + vx * 5  # fontset starts at 0x50
 
                 elif nibbles == 0x0033:
                     # opcode 0xFX33
                     # store digits of VX in memory at addresses I, I+1, I+2
-                    vx = self.V[(opcode & 0x0F00) >> 8]
-                    self.memory[self.I] = vx // 100  # hundreds
-                    self.memory[self.I + 1] = (vx // 10) % 10  # tens
-                    self.memory[self.I + 2] = vx % 10  # ones
+                    vx = V[(opcode & 0x0F00) >> 8]
+                    memory[I] = vx // 100  # hundreds
+                    memory[I + 1] = (vx // 10) % 10  # tens
+                    memory[I + 2] = vx % 10  # ones
 
                 elif nibbles == 0x0055:
                     # opcode 0xFX55
                     # store registers V0 to VX in memory starting at address I
                     x = (opcode & 0x0F00) >> 8
-                    self.memory[self.I : self.I + x + 1] = self.V[: x + 1]
-                    self.I += x + 1
+                    memory[I : I + x + 1] = V[: x + 1]
+                    I += x + 1
 
                 elif nibbles == 0x0065:
                     # opcode 0xFX65
                     # read registers V0 to VX from memory starting at address I
                     x = (opcode & 0x0F00) >> 8
-                    self.V[: x + 1] = self.memory[self.I : self.I + x + 1]
-                    self.I += x + 1
+                    V[: x + 1] = memory[I : I + x + 1]
+                    I += x + 1
 
                 else:
                     print(f"Unknown opcode: {opcode:04X}")
 
             else:
                 print(f"Unknown opcode: {opcode:04X}")
+
+        # write back state of primitive local variables
+        # others are references that modify the original object
+        self.pc = pc
+        self.I = I
 
     def draw_to_screen(self):
         gfx = self.gfx
@@ -372,10 +388,9 @@ class C8Interpreter:
         pygame.display.flip()
         self.draw_flag = False
 
-    def _draw_sprite_to_internal(self, x, y, n):
+    def _draw_sprite_to_internal(self, x, y, n, I):
         gfx = self.gfx
         mem = self.memory
-        I = self.I
 
         collision = 0
         x %= 64
