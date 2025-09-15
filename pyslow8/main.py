@@ -17,7 +17,6 @@ class C8Interpreter:
         self.gfx = [0] * (64 * 32)  # graphics
         self.draw_flag = False
         self.delay_timer = 0  # 60Hz timer, max 255
-        self.sound_timer = 0  # 60Hz timer, max 255
         self.stack = []  # stack for subroutine calls
         self.keys = [0] * 16  # keypad with 16 keys
         self.prev_keys = [0] * 16  # previous frame key states
@@ -323,7 +322,8 @@ class C8Interpreter:
                 elif nibbles == 0x0018:
                     # opcode 0xFX18
                     # set sound timer to VX
-                    self.sound_timer = V[(opcode & 0x0F00) >> 8]
+                    # not implemented
+                    pass
 
                 elif nibbles == 0x001E:
                     # opcode 0xFX1E
@@ -462,8 +462,6 @@ class C8Interpreter:
     def update_timers(self):
         if self.delay_timer > 0:
             self.delay_timer -= 1
-        if self.sound_timer > 0:
-            self.sound_timer -= 1
 
 
 def main(rom_file, system_info):
