@@ -6,7 +6,7 @@ use std::fs;
 use std::thread::sleep;
 use std::time::Duration;
 
-const INSTR_PER_FRAME: usize = 20000000;
+const INSTR_PER_FRAME: usize = 11;
 const FPS_TARGET: usize = 60;
 const MEMORY_SIZE: usize = 4096;
 const PROGRAM_START: usize = 0x200;
@@ -127,7 +127,7 @@ impl Chip8 {
         let max_cols = std::cmp::min(8, SCREEN_WIDTH - x); // mostly 8
 
         if max_rows == 1 && max_cols == 8 {
-            // no row loop and explicit range (0..8) for better optimization
+            // no row loop and explicit range (0..8) for better compiler optimization
             let y_coord = y * SCREEN_WIDTH + x;
             let sprite_byte = self.memory[self.i];
 
@@ -148,6 +148,7 @@ impl Chip8 {
                 (0..max_cols)
                     .filter(|&bit| (sprite_byte >> (7 - bit)) & 1 == 1)
                     .for_each(|bit| {
+                        // doing an if check here is slow
                         self.v[0xF] |= self.gfx[y_coord + bit];
                         self.gfx[y_coord + bit] ^= 1;
                     });

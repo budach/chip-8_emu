@@ -14,8 +14,13 @@ lto = true
 panic = "abort"
 strip = "symbols"
 
-[profile.dev]
-overflow-checks = false
+[profile.profile]
+inherits = "release"
+lto = "thin"
+debug = 1
 
 
 # samply record .\target\profile\rusty8.exe ..\benchmark_roms\1dcell.ch8
+# slow:
+# core::iter::range::impl$6::next
+# core::iter::range::impl$5::spec_next
