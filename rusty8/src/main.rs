@@ -178,15 +178,22 @@ impl Chip8 {
             self.pc += 2;
 
             match opcode & 0xF000 {
-                0x0000 => match opcode & 0x00FF {
-                    // opcode 0x00E0, clear the display
-                    0x00E0 => self.gfx.fill(0),
+                // opcode 0x7XNN, add NN to register VX
+                0x7000 => self.v[((opcode & 0x0F00) >> 8) as usize] += (opcode & 0x00FF) as u8,
 
-                    // opcode 0x00EE, return from subroutine
-                    0x00EE => self.pc = self.stack.pop().expect("Stack underflow"),
+                //opcode 0x4XNN, skip next instruction if VX != NN
+                0x4000 => {
+                    if self.v[((opcode & 0x0F00) >> 8) as usize] != (opcode & 0x00FF) as u8 {
+                        self.pc += 2;
+                    }
+                }
 
-                    _ => println!("Unknown opcode: {:#04X}", opcode),
-                },
+                // opcode 0xDXYN, draw sprite at coordinate (VX, VY) with height N
+                0xD000 => self.draw_sprite(
+                    self.v[((opcode & 0x0F00) >> 8) as usize] as usize,
+                    self.v[((opcode & 0x00F0) >> 4) as usize] as usize,
+                    (opcode & 0x000F) as usize,
+                ),
 
                 // opcode 0x1NNN, jump to address NNN
                 0x1000 => self.pc = (opcode & 0x0FFF) as usize,
@@ -204,13 +211,6 @@ impl Chip8 {
                     }
                 }
 
-                //opcode 0x4XNN, skip next instruction if VX != NN
-                0x4000 => {
-                    if self.v[((opcode & 0x0F00) >> 8) as usize] != (opcode & 0x00FF) as u8 {
-                        self.pc += 2;
-                    }
-                }
-
                 // opcode 0x5XY0, skip next instruction if VX == VY
                 0x5000 => {
                     if self.v[((opcode & 0x0F00) >> 8) as usize]
@@ -222,9 +222,6 @@ impl Chip8 {
 
                 // opcode 0x6XNN, set register VX to NN
                 0x6000 => self.v[((opcode & 0x0F00) >> 8) as usize] = (opcode & 0x00FF) as u8,
-
-                // opcode 0x7XNN, add NN to register VX
-                0x7000 => self.v[((opcode & 0x0F00) >> 8) as usize] += (opcode & 0x00FF) as u8,
 
                 0x8000 => match opcode & 0x000F {
                     // opcode 0x8XY0, set VX to VY
@@ -316,6 +313,16 @@ impl Chip8 {
                     }
                 }
 
+                0x0000 => match opcode & 0x00FF {
+                    // opcode 0x00E0, clear the display
+                    0x00E0 => self.gfx.fill(0),
+
+                    // opcode 0x00EE, return from subroutine
+                    0x00EE => self.pc = self.stack.pop().expect("Stack underflow"),
+
+                    _ => println!("Unknown opcode: {:#04X}", opcode),
+                },
+
                 // opcode 0xANNN, set index register I to NNN
                 0xA000 => self.i = (opcode & 0x0FFF) as usize,
 
@@ -327,13 +334,6 @@ impl Chip8 {
                     self.v[((opcode & 0x0F00) >> 8) as usize] =
                         self.rng.random::<u8>() & (opcode & 0x00FF) as u8
                 }
-
-                // opcode 0xDXYN, draw sprite at coordinate (VX, VY) with height N
-                0xD000 => self.draw_sprite(
-                    self.v[((opcode & 0x0F00) >> 8) as usize] as usize,
-                    self.v[((opcode & 0x00F0) >> 4) as usize] as usize,
-                    (opcode & 0x000F) as usize,
-                ),
 
                 0xE000 => match opcode & 0x00FF {
                     // opcode 0xEX9E, skip next instruction if key with value VX is pressed
