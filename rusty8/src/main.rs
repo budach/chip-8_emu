@@ -6,7 +6,7 @@ use std::fs;
 use std::thread::sleep;
 use std::time::Duration;
 
-const INSTR_PER_FRAME: usize = 11;
+const INSTR_PER_FRAME: usize = 20000000;
 const FPS_TARGET: usize = 60;
 const MEMORY_SIZE: usize = 4096;
 const PROGRAM_START: usize = 0x200;
@@ -123,58 +123,34 @@ impl Chip8 {
         x &= SCREEN_WIDTH - 1;
         y &= SCREEN_HEIGHT - 1;
 
-        let max_rows = std::cmp::min(n, SCREEN_HEIGHT - y); // almost always 1
+        let max_rows = std::cmp::min(n, SCREEN_HEIGHT - y); // mostly 1
         let max_cols = std::cmp::min(8, SCREEN_WIDTH - x); // mostly 8
 
         if max_rows == 1 && max_cols == 8 {
-            // unrolled inner loop
+            // no row loop and explicit range (0..8) for better optimization
             let y_coord = y * SCREEN_WIDTH + x;
             let sprite_byte = self.memory[self.i];
 
-            if (sprite_byte & 0x80) != 0 {
-                self.v[0xF] |= self.gfx[y_coord];
-                self.gfx[y_coord] ^= 1;
-            }
-            if (sprite_byte & 0x40) != 0 {
-                self.v[0xF] |= self.gfx[y_coord + 1];
-                self.gfx[y_coord + 1] ^= 1;
-            }
-            if (sprite_byte & 0x20) != 0 {
-                self.v[0xF] |= self.gfx[y_coord + 2];
-                self.gfx[y_coord + 2] ^= 1;
-            }
-            if (sprite_byte & 0x10) != 0 {
-                self.v[0xF] |= self.gfx[y_coord + 3];
-                self.gfx[y_coord + 3] ^= 1;
-            }
-            if (sprite_byte & 0x08) != 0 {
-                self.v[0xF] |= self.gfx[y_coord + 4];
-                self.gfx[y_coord + 4] ^= 1;
-            }
-            if (sprite_byte & 0x04) != 0 {
-                self.v[0xF] |= self.gfx[y_coord + 5];
-                self.gfx[y_coord + 5] ^= 1;
-            }
-            if (sprite_byte & 0x02) != 0 {
-                self.v[0xF] |= self.gfx[y_coord + 6];
-                self.gfx[y_coord + 6] ^= 1;
-            }
-            if (sprite_byte & 0x01) != 0 {
-                self.v[0xF] |= self.gfx[y_coord + 7];
-                self.gfx[y_coord + 7] ^= 1;
-            }
+            (0..8)
+                .filter(|&bit| (sprite_byte >> (7 - bit)) & 1 == 1)
+                .for_each(|bit| {
+                    if self.v[0xF] == 0 {
+                        self.v[0xF] |= self.gfx[y_coord + bit];
+                    }
+                    self.gfx[y_coord + bit] ^= 1;
+                });
         } else {
-            // as above, but not unrolled
+            // as above, but not unrolled and max_cols unknown at compile time
             for row in 0..max_rows {
                 let y_coord = (y + row) * SCREEN_WIDTH + x;
                 let sprite_byte = self.memory[self.i + row];
 
-                for col in 0..max_cols {
-                    if (sprite_byte >> (7 - col)) & 1 == 1 {
-                        self.v[0xF] |= self.gfx[y_coord + col];
-                        self.gfx[y_coord + col] ^= 1;
-                    }
-                }
+                (0..max_cols)
+                    .filter(|&bit| (sprite_byte >> (7 - bit)) & 1 == 1)
+                    .for_each(|bit| {
+                        self.v[0xF] |= self.gfx[y_coord + bit];
+                        self.gfx[y_coord + bit] ^= 1;
+                    });
             }
         }
     }
