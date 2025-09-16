@@ -17,9 +17,11 @@ const SCREEN_HEIGHT: usize = 32;
 struct Chip8 {
     memory: [u8; MEMORY_SIZE], // TODO also test Vec
     gfx: [u8; SCREEN_WIDTH * SCREEN_HEIGHT],
-    pc: usize,
-    stack: Vec<usize>,
     v: [u8; 16],
+    keys: [bool; 16],
+    prev_keys: [bool; 16],
+    stack: Vec<usize>,
+    pc: usize,
     i: usize,
     delay_timer: u8,
     window: Window,
@@ -34,6 +36,8 @@ impl Chip8 {
             pc: PROGRAM_START,
             stack: Vec::new(),
             v: [0; 16],
+            keys: [false; 16],
+            prev_keys: [false; 16],
             i: 0,
             delay_timer: 0,
             rng: rand::rng(),
@@ -84,7 +88,29 @@ impl Chip8 {
         memory
     }
 
-    fn handle_input(&mut self) {}
+    fn handle_input(&mut self) {
+        self.prev_keys.copy_from_slice(&self.keys);
+
+        self.keys[0x1] = self.window.is_key_down(minifb::Key::Key1);
+        self.keys[0x2] = self.window.is_key_down(minifb::Key::Key2);
+        self.keys[0x3] = self.window.is_key_down(minifb::Key::Key3);
+        self.keys[0xC] = self.window.is_key_down(minifb::Key::Key4);
+
+        self.keys[0x4] = self.window.is_key_down(minifb::Key::Q);
+        self.keys[0x5] = self.window.is_key_down(minifb::Key::W);
+        self.keys[0x6] = self.window.is_key_down(minifb::Key::E);
+        self.keys[0xD] = self.window.is_key_down(minifb::Key::R);
+
+        self.keys[0x7] = self.window.is_key_down(minifb::Key::A);
+        self.keys[0x8] = self.window.is_key_down(minifb::Key::S);
+        self.keys[0x9] = self.window.is_key_down(minifb::Key::D);
+        self.keys[0xE] = self.window.is_key_down(minifb::Key::F);
+
+        self.keys[0xA] = self.window.is_key_down(minifb::Key::Z);
+        self.keys[0x0] = self.window.is_key_down(minifb::Key::X);
+        self.keys[0xB] = self.window.is_key_down(minifb::Key::C);
+        self.keys[0xF] = self.window.is_key_down(minifb::Key::V);
+    }
 
     fn update_timers(&mut self) {
         if self.delay_timer > 0 {
@@ -295,9 +321,42 @@ impl Chip8 {
                     (opcode & 0x000F) as usize,
                 ),
 
+                0xE000 => match opcode & 0x00FF {
+                    // opcode 0xEX9E, skip next instruction if key with value VX is pressed
+                    0x009E => {
+                        if self.keys[self.v[((opcode & 0x0F00) >> 8) as usize] as usize] {
+                            self.pc += 2;
+                        }
+                    }
+
+                    // opcode 0xEXA1, skip next instruction if key with value VX is not pressed
+                    0x00A1 => {
+                        if !self.keys[self.v[((opcode & 0x0F00) >> 8) as usize] as usize] {
+                            self.pc += 2;
+                        }
+                    }
+
+                    _ => println!("Unknown opcode: {:#04X}", opcode),
+                },
+
                 0xF000 => match opcode & 0x00FF {
                     // opcode 0xFX07, set VX to value of delay timer
                     0x0007 => self.v[((opcode & 0x0F00) >> 8) as usize] = self.delay_timer,
+
+                    // opcode 0xFX0A, wait for a key release, store the value in VX
+                    0x000A => {
+                        //check if any key that is pressed in prev_keys is now released in keys
+                        if let Some((i, _)) = self
+                            .prev_keys
+                            .iter()
+                            .enumerate()
+                            .find(|&(ref i, &key)| key && !self.keys[*i])
+                        {
+                            self.v[((opcode & 0x0F00) >> 8) as usize] = i as u8;
+                        } else {
+                            self.pc -= 2; // repeat this instruction
+                        }
+                    }
 
                     // opcode 0xFX15, set delay timer to VX
                     0x0015 => self.delay_timer = self.v[((opcode & 0x0F00) >> 8) as usize],
