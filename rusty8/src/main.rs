@@ -441,7 +441,6 @@ fn main() {
 
         let current_time = std::time::Instant::now();
         if current_time.duration_since(last_title_update) >= Duration::from_secs(2) {
-            last_title_update = current_time;
             let real_fps = 1.0 / (frame_time + sleep_time).as_secs_f64();
             interpreter.window.set_title(&format!(
                 "{} | FPS: {:.2} | MIPS: {:.2}",
@@ -449,6 +448,7 @@ fn main() {
                 real_fps,
                 (INSTR_PER_FRAME as f64 * real_fps) / 1000000.0
             ));
+            last_title_update = current_time;
         }
     }
 }
