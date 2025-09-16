@@ -1,6 +1,12 @@
+use minifb::{Scale, Window, WindowOptions};
+use raw_cpuid::CpuId;
 use std::env;
 use std::fs;
+use std::thread::sleep;
+use std::time::Duration;
 
+const INSTR_PER_FRAME: usize = 11;
+const FPS_TARGET: usize = 60;
 const MEMORY_SIZE: usize = 4096;
 const PROGRAM_START: usize = 0x200;
 const FONTSET_START: usize = 0x50;
@@ -14,6 +20,8 @@ struct Chip8 {
     stack: Vec<usize>,
     v: [u8; 16],
     i: usize,
+    delay_timer: u8,
+    window: Window,
 }
 
 impl Chip8 {
@@ -25,6 +33,17 @@ impl Chip8 {
             stack: Vec::new(),
             v: [0; 16],
             i: 0,
+            delay_timer: 0,
+            window: Window::new(
+                "Rusty8",
+                SCREEN_WIDTH,
+                SCREEN_HEIGHT,
+                WindowOptions {
+                    scale: Scale::X16,
+                    ..WindowOptions::default()
+                },
+            )
+            .unwrap(),
         }
     }
 
@@ -64,7 +83,11 @@ impl Chip8 {
 
     fn handle_input(&mut self) {}
 
-    fn update_timers(&mut self) {}
+    fn update_timers(&mut self) {
+        if self.delay_timer > 0 {
+            self.delay_timer -= 1;
+        }
+    }
 
     fn draw_sprite(&mut self, mut x: usize, mut y: usize, n: usize) {
         let mut collision = 0;
@@ -90,7 +113,19 @@ impl Chip8 {
         self.v[0xF] = collision;
     }
 
-    fn draw_to_screen(&self) {}
+    fn draw_to_screen(&mut self) {
+        self.window
+            .update_with_buffer(
+                &self
+                    .gfx
+                    .iter()
+                    .map(|&pixel| if pixel == 0 { 0x000000 } else { 0xFFA500 })
+                    .collect::<Vec<u32>>(),
+                SCREEN_WIDTH,
+                SCREEN_HEIGHT,
+            )
+            .unwrap();
+    }
 
     fn emulate_instruction(&mut self, how_many: usize) {
         let mut opcode: u16;
@@ -140,10 +175,43 @@ fn main() {
         std::process::exit(1);
     }
 
+    let system_info = format!(
+        "Rusty8 | CPU: {}",
+        CpuId::new()
+            .get_processor_brand_string()
+            .as_ref()
+            .map_or_else(|| "n/a", |pbs| pbs.as_str())
+    );
+
     let mut interpreter = Chip8::new(&args[1]);
 
-    interpreter.handle_input();
-    interpreter.update_timers();
-    interpreter.emulate_instruction(200);
-    interpreter.draw_to_screen();
+    let frame_time_target: Duration = Duration::from_secs_f64(1.0 / FPS_TARGET as f64);
+    let mut last_title_update = std::time::Instant::now();
+
+    while interpreter.window.is_open() {
+        let start_time = std::time::Instant::now();
+
+        interpreter.handle_input();
+        interpreter.update_timers();
+        interpreter.emulate_instruction(INSTR_PER_FRAME);
+        interpreter.draw_to_screen();
+
+        let frame_time = start_time.elapsed();
+        let sleep_time = frame_time_target.saturating_sub(frame_time);
+        if sleep_time > Duration::ZERO {
+            sleep(sleep_time);
+        }
+
+        let current_time = std::time::Instant::now();
+        if current_time.duration_since(last_title_update) >= Duration::from_secs(2) {
+            last_title_update = current_time;
+            let real_fps = 1.0 / (frame_time + sleep_time).as_secs_f64();
+            interpreter.window.set_title(&format!(
+                "{} | FPS: {:.2} | MIPS: {:.2}",
+                system_info,
+                real_fps,
+                (INSTR_PER_FRAME as f64 * real_fps) / 1000000.0
+            ));
+        }
+    }
 }
