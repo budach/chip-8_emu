@@ -1,3 +1,6 @@
+# compile like this: 
+# $ RUSTFLAGS="-C target-cpu=native" cargo build --release
+
 [package]
 name = "rusty8"
 version = "0.1.0"
@@ -6,6 +9,7 @@ edition = "2024"
 [dependencies]
 minifb = "0.28"
 raw-cpuid = "11.6.0"
+rand = "0.9.2"
 
 [profile.release]
 codegen-units = 1

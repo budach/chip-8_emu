@@ -1,4 +1,5 @@
 use minifb::{Scale, Window, WindowOptions};
+use rand::prelude::*;
 use raw_cpuid::CpuId;
 use std::env;
 use std::fs;
@@ -22,6 +23,7 @@ struct Chip8 {
     i: usize,
     delay_timer: u8,
     window: Window,
+    rng: ThreadRng,
 }
 
 impl Chip8 {
@@ -34,6 +36,7 @@ impl Chip8 {
             v: [0; 16],
             i: 0,
             delay_timer: 0,
+            rng: rand::rng(),
             window: Window::new(
                 "Rusty8",
                 SCREEN_WIDTH,
@@ -148,11 +151,142 @@ impl Chip8 {
                 // opcode 0x1NNN, jump to address NNN
                 0x1000 => self.pc = (opcode & 0x0FFF) as usize,
 
+                //opcode 0x2NNN, call subroutine at address NNN
+                0x2000 => {
+                    self.stack.push(self.pc);
+                    self.pc = (opcode & 0x0FFF) as usize;
+                }
+
+                //opcode 0x3XNN, skip next instruction if VX == NN
+                0x3000 => {
+                    if self.v[((opcode & 0x0F00) >> 8) as usize] == (opcode & 0x00FF) as u8 {
+                        self.pc += 2;
+                    }
+                }
+
+                //opcode 0x4XNN, skip next instruction if VX != NN
+                0x4000 => {
+                    if self.v[((opcode & 0x0F00) >> 8) as usize] != (opcode & 0x00FF) as u8 {
+                        self.pc += 2;
+                    }
+                }
+
+                // opcode 0x5XY0, skip next instruction if VX == VY
+                0x5000 => {
+                    if self.v[((opcode & 0x0F00) >> 8) as usize]
+                        == self.v[((opcode & 0x00F0) >> 4) as usize]
+                    {
+                        self.pc += 2;
+                    }
+                }
+
                 // opcode 0x6XNN, set register VX to NN
                 0x6000 => self.v[((opcode & 0x0F00) >> 8) as usize] = (opcode & 0x00FF) as u8,
 
+                // opcode 0x7XNN, add NN to register VX
+                0x7000 => self.v[((opcode & 0x0F00) >> 8) as usize] += (opcode & 0x00FF) as u8,
+
+                0x8000 => match opcode & 0x000F {
+                    // opcode 0x8XY0, set VX to VY
+                    0x0000 => {
+                        self.v[((opcode & 0x0F00) >> 8) as usize] =
+                            self.v[((opcode & 0x00F0) >> 4) as usize]
+                    }
+
+                    // opcode 0x8XY1, set VX to VX OR VY
+                    0x0001 => {
+                        self.v[((opcode & 0x0F00) >> 8) as usize] |=
+                            self.v[((opcode & 0x00F0) >> 4) as usize];
+                        self.v[0xF] = 0;
+                    }
+
+                    // opcode 0x8XY2, set VX to VX AND VY
+                    0x0002 => {
+                        self.v[((opcode & 0x0F00) >> 8) as usize] &=
+                            self.v[((opcode & 0x00F0) >> 4) as usize];
+                        self.v[0xF] = 0;
+                    }
+
+                    // opcode 0x8XY3, set VX to VX XOR VY
+                    0x0003 => {
+                        self.v[((opcode & 0x0F00) >> 8) as usize] ^=
+                            self.v[((opcode & 0x00F0) >> 4) as usize];
+                        self.v[0xF] = 0;
+                    }
+
+                    // opcode 0x8XY4, add VY to VX, set VF to 1 if overflow, else 0
+                    0x0004 => {
+                        let x = ((opcode & 0x0F00) >> 8) as usize;
+                        let y = ((opcode & 0x00F0) >> 4) as usize;
+                        let (sum, overflow) = self.v[x].overflowing_add(self.v[y]);
+                        self.v[x] = sum;
+                        self.v[0xF] = overflow as u8;
+                    }
+
+                    // opcode 0x8XY5, subtract VY from VX, set VF to 0 if underflow, else 1
+                    0x0005 => {
+                        let x = ((opcode & 0x0F00) >> 8) as usize;
+                        let y = ((opcode & 0x00F0) >> 4) as usize;
+                        let (diff, underflow) = self.v[x].overflowing_sub(self.v[y]);
+                        self.v[x] = diff;
+                        self.v[0xF] = (!underflow) as u8;
+                    }
+
+                    // opcode 0x8XY6, shift VX right by 1
+                    // set VF to least significant bit of VX before shift
+                    0x0006 => {
+                        let x = ((opcode & 0x0F00) >> 8) as usize;
+                        let y = ((opcode & 0x00F0) >> 4) as usize;
+                        self.v[x] = self.v[y];
+                        let overflow = self.v[x] & 0x1;
+                        self.v[x] >>= 1;
+                        self.v[0xF] = overflow;
+                    }
+
+                    // opcode 0x8XY7, set VX to VY - VX
+                    // set VF to 0 if underflow, else 1
+                    0x0007 => {
+                        let x = ((opcode & 0x0F00) >> 8) as usize;
+                        let y = ((opcode & 0x00F0) >> 4) as usize;
+                        let (diff, underflow) = self.v[y].overflowing_sub(self.v[x]);
+                        self.v[x] = diff;
+                        self.v[0xF] = (!underflow) as u8;
+                    }
+
+                    // opcode 0x8XYE, set VX to VX << 1
+                    // set VF to most significant bit of VX before shift
+                    0x000E => {
+                        let x = ((opcode & 0x0F00) >> 8) as usize;
+                        let y = ((opcode & 0x00F0) >> 4) as usize;
+                        self.v[x] = self.v[y];
+                        let overflow = (self.v[x] & 0x80) >> 7;
+                        self.v[x] <<= 1;
+                        self.v[0xF] = overflow;
+                    }
+
+                    _ => println!("Unknown opcode: {:#04X}", opcode),
+                },
+
+                // opcode 0x9XY0, skip next instruction if VX != VY
+                0x9000 => {
+                    if self.v[((opcode & 0x0F00) >> 8) as usize]
+                        != self.v[((opcode & 0x00F0) >> 4) as usize]
+                    {
+                        self.pc += 2;
+                    }
+                }
+
                 // opcode 0xANNN, set index register I to NNN
                 0xA000 => self.i = (opcode & 0x0FFF) as usize,
+
+                // opcode 0xBNNN, jump to address NNN + V0
+                0xB000 => self.pc = (opcode & 0x0FFF) as usize + self.v[0] as usize,
+
+                // opcode 0xCXNN, set VX to random byte AND NN
+                0xC000 => {
+                    self.v[((opcode & 0x0F00) >> 8) as usize] =
+                        self.rng.random::<u8>() & (opcode & 0x00FF) as u8
+                }
 
                 // opcode 0xDXYN, draw sprite at coordinate (VX, VY) with height N
                 0xD000 => self.draw_sprite(
@@ -160,6 +294,50 @@ impl Chip8 {
                     self.v[((opcode & 0x00F0) >> 4) as usize] as usize,
                     (opcode & 0x000F) as usize,
                 ),
+
+                0xF000 => match opcode & 0x00FF {
+                    // opcode 0xFX07, set VX to value of delay timer
+                    0x0007 => self.v[((opcode & 0x0F00) >> 8) as usize] = self.delay_timer,
+
+                    // opcode 0xFX15, set delay timer to VX
+                    0x0015 => self.delay_timer = self.v[((opcode & 0x0F00) >> 8) as usize],
+
+                    // opcode 0xFX18, set sound timer to VX, not implemented
+                    0x0018 => {}
+
+                    // opcode 0xFX1E, add VX to I
+                    0x001E => self.i += self.v[((opcode & 0x0F00) >> 8) as usize] as usize,
+
+                    // opcode 0xFX29, set I to location of sprite for digit VX
+                    0x0029 => {
+                        self.i =
+                            FONTSET_START + (self.v[((opcode & 0x0F00) >> 8) as usize] as usize * 5)
+                    }
+
+                    // opcode 0xFX33, store digits of VX in memory at addresses I, I+1, I+2
+                    0x0033 => {
+                        let value = self.v[((opcode & 0x0F00) >> 8) as usize];
+                        self.memory[self.i] = value / 100;
+                        self.memory[self.i + 1] = (value / 10) % 10;
+                        self.memory[self.i + 2] = value % 10;
+                    }
+
+                    // opcode 0xFX55, store registers V0 to VX in memory starting at address I
+                    0x0055 => {
+                        let x = ((opcode & 0x0F00) >> 8) as usize;
+                        self.memory[self.i..=self.i + x].copy_from_slice(&self.v[0..=x]);
+                        self.i += x + 1;
+                    }
+
+                    // opcode 0xFX65, read registers V0 to VX from memory starting at address I
+                    0x0065 => {
+                        let x = ((opcode & 0x0F00) >> 8) as usize;
+                        self.v[0..=x].copy_from_slice(&self.memory[self.i..=self.i + x]);
+                        self.i += x + 1;
+                    }
+
+                    _ => println!("Unknown opcode: {:#04X}", opcode),
+                },
 
                 _ => println!("Unknown opcode: {:#04X}", opcode),
             }
