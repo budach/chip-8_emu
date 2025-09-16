@@ -15,7 +15,7 @@ const SCREEN_WIDTH: usize = 64;
 const SCREEN_HEIGHT: usize = 32;
 
 struct Chip8 {
-    memory: [u8; MEMORY_SIZE], // TODO also test Vec
+    memory: [u8; MEMORY_SIZE],
     gfx: [u8; SCREEN_WIDTH * SCREEN_HEIGHT],
     v: [u8; 16],
     keys: [bool; 16],
@@ -413,7 +413,7 @@ fn main() {
     }
 
     let system_info = format!(
-        "Rusty8 | CPU: {}",
+        "CPU: {}",
         CpuId::new()
             .get_processor_brand_string()
             .as_ref()
@@ -442,12 +442,14 @@ fn main() {
         let current_time = std::time::Instant::now();
         if current_time.duration_since(last_title_update) >= Duration::from_secs(2) {
             let real_fps = 1.0 / (frame_time + sleep_time).as_secs_f64();
-            interpreter.window.set_title(&format!(
-                "{} | FPS: {:.2} | MIPS: {:.2}",
-                system_info,
+            let status = format!(
+                "Rusty8 | FPS: {:.2} | MIPS: {:.2} | {}",
                 real_fps,
-                (INSTR_PER_FRAME as f64 * real_fps) / 1000000.0
-            ));
+                (INSTR_PER_FRAME as f64 * real_fps) / 1000000.0,
+                system_info
+            );
+            interpreter.window.set_title(&status);
+            println!("{status}");
             last_title_update = current_time;
         }
     }
