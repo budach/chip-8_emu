@@ -118,6 +118,7 @@ impl Chip8 {
         }
     }
 
+    #[inline(always)]
     fn draw_sprite(&mut self, mut x: usize, mut y: usize, n: usize) {
         self.v[0xF] = 0;
         x &= SCREEN_WIDTH - 1;
