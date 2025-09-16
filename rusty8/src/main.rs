@@ -171,10 +171,8 @@ impl Chip8 {
     }
 
     fn emulate_instruction(&mut self, how_many: usize) {
-        let mut opcode: u16;
-
         for _ in 0..how_many {
-            opcode = ((self.memory[self.pc] as u16) << 8) | (self.memory[self.pc + 1] as u16);
+            let opcode = ((self.memory[self.pc] as u16) << 8) | (self.memory[self.pc + 1] as u16);
             self.pc += 2;
 
             match opcode & 0xF000 {
