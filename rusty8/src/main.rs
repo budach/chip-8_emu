@@ -123,50 +123,48 @@ impl Chip8 {
         x &= SCREEN_WIDTH - 1;
         y &= SCREEN_HEIGHT - 1;
 
-        let max_rows = std::cmp::min(n, SCREEN_HEIGHT - y);
-        let max_cols = std::cmp::min(8, SCREEN_WIDTH - x);
+        let max_rows = std::cmp::min(n, SCREEN_HEIGHT - y); // almost always 1
+        let max_cols = std::cmp::min(8, SCREEN_WIDTH - x); // mostly 8
 
-        if max_cols == 8 {
-            // unrolled inner loop for performance
-            for row in 0..max_rows {
-                let y_coord = (y + row) * SCREEN_WIDTH + x;
-                let sprite_byte = self.memory[self.i + row];
+        if max_rows == 1 && max_cols == 8 {
+            // unrolled inner loop
+            let y_coord = y * SCREEN_WIDTH + x;
+            let sprite_byte = self.memory[self.i];
 
-                if (sprite_byte & 0x80) != 0 {
-                    self.v[0xF] |= self.gfx[y_coord];
-                    self.gfx[y_coord] ^= 1;
-                }
-                if (sprite_byte & 0x40) != 0 {
-                    self.v[0xF] |= self.gfx[y_coord + 1];
-                    self.gfx[y_coord + 1] ^= 1;
-                }
-                if (sprite_byte & 0x20) != 0 {
-                    self.v[0xF] |= self.gfx[y_coord + 2];
-                    self.gfx[y_coord + 2] ^= 1;
-                }
-                if (sprite_byte & 0x10) != 0 {
-                    self.v[0xF] |= self.gfx[y_coord + 3];
-                    self.gfx[y_coord + 3] ^= 1;
-                }
-                if (sprite_byte & 0x08) != 0 {
-                    self.v[0xF] |= self.gfx[y_coord + 4];
-                    self.gfx[y_coord + 4] ^= 1;
-                }
-                if (sprite_byte & 0x04) != 0 {
-                    self.v[0xF] |= self.gfx[y_coord + 5];
-                    self.gfx[y_coord + 5] ^= 1;
-                }
-                if (sprite_byte & 0x02) != 0 {
-                    self.v[0xF] |= self.gfx[y_coord + 6];
-                    self.gfx[y_coord + 6] ^= 1;
-                }
-                if (sprite_byte & 0x01) != 0 {
-                    self.v[0xF] |= self.gfx[y_coord + 7];
-                    self.gfx[y_coord + 7] ^= 1;
-                }
+            if (sprite_byte & 0x80) != 0 {
+                self.v[0xF] |= self.gfx[y_coord];
+                self.gfx[y_coord] ^= 1;
+            }
+            if (sprite_byte & 0x40) != 0 {
+                self.v[0xF] |= self.gfx[y_coord + 1];
+                self.gfx[y_coord + 1] ^= 1;
+            }
+            if (sprite_byte & 0x20) != 0 {
+                self.v[0xF] |= self.gfx[y_coord + 2];
+                self.gfx[y_coord + 2] ^= 1;
+            }
+            if (sprite_byte & 0x10) != 0 {
+                self.v[0xF] |= self.gfx[y_coord + 3];
+                self.gfx[y_coord + 3] ^= 1;
+            }
+            if (sprite_byte & 0x08) != 0 {
+                self.v[0xF] |= self.gfx[y_coord + 4];
+                self.gfx[y_coord + 4] ^= 1;
+            }
+            if (sprite_byte & 0x04) != 0 {
+                self.v[0xF] |= self.gfx[y_coord + 5];
+                self.gfx[y_coord + 5] ^= 1;
+            }
+            if (sprite_byte & 0x02) != 0 {
+                self.v[0xF] |= self.gfx[y_coord + 6];
+                self.gfx[y_coord + 6] ^= 1;
+            }
+            if (sprite_byte & 0x01) != 0 {
+                self.v[0xF] |= self.gfx[y_coord + 7];
+                self.gfx[y_coord + 7] ^= 1;
             }
         } else {
-            // as above, but with inner loop not unrolled
+            // as above, but not unrolled
             for row in 0..max_rows {
                 let y_coord = (y + row) * SCREEN_WIDTH + x;
                 let sprite_byte = self.memory[self.i + row];
