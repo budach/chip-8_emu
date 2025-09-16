@@ -20,6 +20,7 @@ cd rusty8
 cargo run --release -- ../game_roms/breakout.ch8
 ```
 
+## Notes
 
 Test ROMs are from <https://github.com/Timendus/chip8-test-suite>.
 
