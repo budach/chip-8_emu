@@ -37,7 +37,7 @@ impl Chip8 {
             gfx: [0; SCREEN_WIDTH * SCREEN_HEIGHT],
             screen_buffer: [0; SCREEN_WIDTH * SCREEN_HEIGHT],
             pc: PROGRAM_START,
-            stack: Vec::new(),
+            stack: Vec::with_capacity(12),
             v: [0; 16],
             keys: [false; 16],
             prev_keys: [false; 16],
