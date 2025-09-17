@@ -17,6 +17,7 @@ const SCREEN_HEIGHT: usize = 32;
 struct Chip8 {
     memory: [u8; MEMORY_SIZE],
     gfx: [u8; SCREEN_WIDTH * SCREEN_HEIGHT],
+    screen_buffer: [u32; SCREEN_WIDTH * SCREEN_HEIGHT],
     v: [u8; 16],
     keys: [bool; 16],
     prev_keys: [bool; 16],
@@ -34,6 +35,7 @@ impl Chip8 {
         Chip8 {
             memory: Self::_init_memory(filename),
             gfx: [0; SCREEN_WIDTH * SCREEN_HEIGHT],
+            screen_buffer: [0; SCREEN_WIDTH * SCREEN_HEIGHT],
             pc: PROGRAM_START,
             stack: Vec::new(),
             v: [0; 16],
@@ -159,16 +161,12 @@ impl Chip8 {
     }
 
     fn draw_to_screen(&mut self) {
+        for (i, &pixel) in self.gfx.iter().enumerate() {
+            self.screen_buffer[i] = if pixel == 0 { 0x000000 } else { 0xFFA500 };
+        }
+
         self.window
-            .update_with_buffer(
-                &self
-                    .gfx
-                    .iter()
-                    .map(|&pixel| 0xFFA500 * pixel as u32)
-                    .collect::<Vec<u32>>(),
-                SCREEN_WIDTH,
-                SCREEN_HEIGHT,
-            )
+            .update_with_buffer(&self.screen_buffer, SCREEN_WIDTH, SCREEN_HEIGHT)
             .unwrap();
     }
 
