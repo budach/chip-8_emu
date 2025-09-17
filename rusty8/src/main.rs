@@ -115,12 +115,8 @@ impl Chip8 {
     }
 
     fn update_timers(&mut self) {
-        if self.delay_timer > 0 {
-            self.delay_timer -= 1;
-        }
-        if self.sound_timer > 0 {
-            self.sound_timer -= 1;
-        }
+        self.delay_timer = self.delay_timer.saturating_sub(1);
+        self.sound_timer = self.sound_timer.saturating_sub(1);
     }
 
     #[inline(always)]
@@ -168,7 +164,7 @@ impl Chip8 {
                 &self
                     .gfx
                     .iter()
-                    .map(|&pixel| if pixel == 0 { 0x000000 } else { 0xFFA500 })
+                    .map(|&pixel| 0xFFA500 * pixel as u32)
                     .collect::<Vec<u32>>(),
                 SCREEN_WIDTH,
                 SCREEN_HEIGHT,
