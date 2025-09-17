@@ -6,7 +6,7 @@ use std::fs;
 use std::thread::sleep;
 use std::time::Duration;
 
-const INSTR_PER_FRAME: usize = 11;
+const INSTR_PER_FRAME: usize = 200000000;
 const FPS_TARGET: usize = 60;
 const MEMORY_SIZE: usize = 4096;
 const PROGRAM_START: usize = 0x200;
@@ -24,6 +24,7 @@ struct Chip8 {
     pc: usize,
     i: usize,
     delay_timer: u8,
+    sound_timer: u8,
     window: Window,
     rng: ThreadRng,
 }
@@ -40,6 +41,7 @@ impl Chip8 {
             prev_keys: [false; 16],
             i: 0,
             delay_timer: 0,
+            sound_timer: 0,
             rng: rand::rng(),
             window: Window::new(
                 "Rusty8",
@@ -115,6 +117,9 @@ impl Chip8 {
     fn update_timers(&mut self) {
         if self.delay_timer > 0 {
             self.delay_timer -= 1;
+        }
+        if self.sound_timer > 0 {
+            self.sound_timer -= 1;
         }
     }
 
@@ -374,8 +379,8 @@ impl Chip8 {
                     // opcode 0xFX15, set delay timer to VX
                     0x0015 => self.delay_timer = self.v[((opcode & 0x0F00) >> 8) as usize],
 
-                    // opcode 0xFX18, set sound timer to VX, not implemented
-                    0x0018 => {}
+                    // opcode 0xFX18, set sound timer to VX,
+                    0x0018 => self.sound_timer = self.v[((opcode & 0x0F00) >> 8) as usize],
 
                     // opcode 0xFX1E, add VX to I
                     0x001E => self.i += self.v[((opcode & 0x0F00) >> 8) as usize] as usize,
