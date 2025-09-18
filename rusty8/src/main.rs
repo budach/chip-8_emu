@@ -121,45 +121,6 @@ impl Chip8 {
         self.sound_timer = self.sound_timer.saturating_sub(1);
     }
 
-    #[inline(always)]
-    fn draw_sprite(&mut self, mut x: usize, mut y: usize, n: usize) {
-        self.v[0xF] = 0;
-        x &= SCREEN_WIDTH - 1;
-        y &= SCREEN_HEIGHT - 1;
-
-        let max_rows = std::cmp::min(n, SCREEN_HEIGHT - y); // mostly 1
-        let max_cols = std::cmp::min(8, SCREEN_WIDTH - x); // mostly 8
-
-        if max_rows == 1 && max_cols == 8 {
-            // no row loop and explicit range (0..8) for better compiler optimization
-            let y_coord = y * SCREEN_WIDTH + x;
-            let sprite_byte = self.memory[self.i];
-
-            (0..8)
-                .filter(|&bit| sprite_byte & (0x80 >> bit) != 0)
-                .for_each(|bit| {
-                    if self.v[0xF] == 0 {
-                        self.v[0xF] |= self.gfx[y_coord + bit];
-                    }
-                    self.gfx[y_coord + bit] ^= 1;
-                });
-        } else {
-            // as above, but not unrolled and max_cols unknown at compile time
-            for row in 0..max_rows {
-                let y_coord = (y + row) * SCREEN_WIDTH + x;
-                let sprite_byte = self.memory[self.i + row];
-
-                (0..max_cols)
-                    .filter(|&bit| sprite_byte & (0x80 >> bit) != 0)
-                    .for_each(|bit| {
-                        // doing an if check here is slow
-                        self.v[0xF] |= self.gfx[y_coord + bit];
-                        self.gfx[y_coord + bit] ^= 1;
-                    });
-            }
-        }
-    }
-
     fn draw_to_screen(&mut self) {
         for (i, &pixel) in self.gfx.iter().enumerate() {
             self.screen_buffer[i] = if pixel == 0 { 0x000000 } else { 0xFFA500 };
@@ -187,11 +148,43 @@ impl Chip8 {
                 }
 
                 // opcode 0xDXYN, draw sprite at coordinate (VX, VY) with height N
-                0xD000 => self.draw_sprite(
-                    self.v[((opcode & 0x0F00) >> 8) as usize] as usize,
-                    self.v[((opcode & 0x00F0) >> 4) as usize] as usize,
-                    (opcode & 0x000F) as usize,
-                ),
+                0xD000 => {
+                    self.v[0xF] = 0;
+                    let x = self.v[((opcode & 0x0F00) >> 8) as usize] as usize & (SCREEN_WIDTH - 1);
+                    let y =
+                        self.v[((opcode & 0x00F0) >> 4) as usize] as usize & (SCREEN_HEIGHT - 1);
+
+                    let max_rows = std::cmp::min((opcode & 0x000F) as usize, SCREEN_HEIGHT - y); // mostly 1
+                    let max_cols = std::cmp::min(8, SCREEN_WIDTH - x); // mostly 8
+
+                    if max_rows == 1 && max_cols == 8 {
+                        // no row loop and explicit range (0..8) for better compiler optimization
+                        let y_coord = y * SCREEN_WIDTH + x;
+                        let sprite_byte = self.memory[self.i];
+
+                        (0..8)
+                            .filter(|&bit| sprite_byte & (0x80 >> bit) != 0)
+                            .for_each(|bit| {
+                                if self.v[0xF] == 0 {
+                                    self.v[0xF] |= self.gfx[y_coord + bit];
+                                }
+                                self.gfx[y_coord + bit] ^= 1;
+                            });
+                    } else {
+                        // as above, but not unrolled and max_cols unknown at compile time
+                        for row in 0..max_rows {
+                            let y_coord = (y + row) * SCREEN_WIDTH + x;
+                            let sprite_byte = self.memory[self.i + row];
+
+                            (0..max_cols)
+                                .filter(|&bit| sprite_byte & (0x80 >> bit) != 0)
+                                .for_each(|bit| {
+                                    self.v[0xF] |= self.gfx[y_coord + bit];
+                                    self.gfx[y_coord + bit] ^= 1;
+                                });
+                        }
+                    }
+                }
 
                 // opcode 0x1NNN, jump to address NNN
                 0x1000 => self.pc = (opcode & 0x0FFF) as usize,
