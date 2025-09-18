@@ -6,7 +6,7 @@ use std::fs;
 use std::thread::sleep;
 use std::time::Duration;
 
-const INSTR_PER_FRAME: usize = 200000000;
+const INSTR_PER_FRAME: usize = 11;
 const FPS_TARGET: usize = 60;
 const MEMORY_SIZE: usize = 4096;
 const PROGRAM_START: usize = 0x200;
