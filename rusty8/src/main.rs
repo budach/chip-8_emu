@@ -136,7 +136,7 @@ impl Chip8 {
             let sprite_byte = self.memory[self.i];
 
             (0..8)
-                .filter(|&bit| (sprite_byte >> (7 - bit)) & 1 == 1)
+                .filter(|&bit| sprite_byte & (0x80 >> bit) != 0)
                 .for_each(|bit| {
                     if self.v[0xF] == 0 {
                         self.v[0xF] |= self.gfx[y_coord + bit];
@@ -150,7 +150,7 @@ impl Chip8 {
                 let sprite_byte = self.memory[self.i + row];
 
                 (0..max_cols)
-                    .filter(|&bit| (sprite_byte >> (7 - bit)) & 1 == 1)
+                    .filter(|&bit| sprite_byte & (0x80 >> bit) != 0)
                     .for_each(|bit| {
                         // doing an if check here is slow
                         self.v[0xF] |= self.gfx[y_coord + bit];
