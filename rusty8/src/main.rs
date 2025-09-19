@@ -185,8 +185,8 @@ impl Chip8 {
 
                 // opcode 0xDXYN, draw sprite at coordinate (VX, VY) with height N
                 0xD000 => self.draw_sprite(
-                    self.v[((opcode & 0x0F00) >> 8) as usize] as usize & SCREEN_WIDTH - 1,
-                    self.v[((opcode & 0x00F0) >> 4) as usize] as usize & SCREEN_HEIGHT - 1,
+                    self.v[((opcode & 0x0F00) >> 8) as usize] as usize & (SCREEN_WIDTH - 1),
+                    self.v[((opcode & 0x00F0) >> 4) as usize] as usize & (SCREEN_HEIGHT - 1),
                     (opcode & 0x000F) as usize,
                 ),
 
