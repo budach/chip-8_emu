@@ -9,16 +9,57 @@
 #define MEM_SIZE 4096
 #define PROGRAM_START 0x200
 #define FONTSET_START 0x50
+#define STACK_SIZE 16
+#define KEY_COUNT 16
+#define REGISTER_COUNT 16
 #define SCREEN_WIDTH 64
 #define SCREEN_HEIGHT 32
 #define SCREEN_SCALE 15
 
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// stack data structure
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+struct Stack {
+    size_t data[STACK_SIZE];
+    size_t ptr;
+};
+
+void stack_init(struct Stack* stack)
+{
+    stack->ptr = 0;
+    memset(stack->data, 0, sizeof(stack->data));
+}
+
+void stack_push(struct Stack* stack, size_t value)
+{
+    if (stack->ptr >= STACK_SIZE) {
+        printf("Stack overflow\n");
+        exit(1);
+    }
+    stack->data[stack->ptr++] = value;
+}
+
+size_t stack_pop(struct Stack* stack)
+{
+    if (stack->ptr == 0) {
+        printf("Stack underflow\n");
+        exit(1);
+    }
+    return stack->data[--stack->ptr];
+}
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// chip-8 data structure
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 struct Chip8 {
     uint8_t mem[MEM_SIZE];
     uint8_t gfx[SCREEN_WIDTH * SCREEN_HEIGHT];
-    uint8_t V[16];
-    uint8_t keys[16];
-    uint8_t prev_keys[16];
+    struct Stack stack;
+    uint8_t V[REGISTER_COUNT];
+    uint8_t keys[KEY_COUNT];
+    uint8_t prev_keys[KEY_COUNT];
     size_t pc;
     size_t I;
     uint8_t delay_timer;
@@ -69,6 +110,10 @@ void chip8_init(struct Chip8* chip8, const char* rom_path)
     };
 
     memcpy(&chip8->mem[FONTSET_START], fontset, 80);
+
+    // init stack
+
+    stack_init(&chip8->stack);
 
     // init other arrays
 
@@ -139,6 +184,12 @@ void chip8_emulate_instructions(struct Chip8* c8, int instr_count)
                 memset(c8->gfx, 0, sizeof(c8->gfx));
                 break;
 
+            case 0x00EE:
+
+                // opcode 0x00EE, return from subroutine
+                c8->pc = stack_pop(&c8->stack);
+                break;
+
             default:
 
                 printf("Unknown opcode: 0x%04X\n", opcode);
@@ -154,10 +205,155 @@ void chip8_emulate_instructions(struct Chip8* c8, int instr_count)
             c8->pc = opcode & 0x0FFF;
             break;
 
+        case 0x2000:
+
+            // opcode 0x2NNN, call subroutine at address NNN
+            stack_push(&c8->stack, c8->pc);
+            c8->pc = opcode & 0x0FFF;
+            break;
+
+        case 0x3000:
+
+            // opcode 0x3XNN, skip next instruction if VX == NN
+            if (c8->V[(opcode & 0x0F00) >> 8] == (opcode & 0x00FF)) {
+                c8->pc += 2;
+            }
+            break;
+
+        case 0x4000:
+
+            // opcode 0x4XNN, skip next instruction if VX != NN
+            if (c8->V[(opcode & 0x0F00) >> 8] != (opcode & 0x00FF)) {
+                c8->pc += 2;
+            }
+            break;
+
+        case 0x5000:
+
+            // opcode 0x5XY0, skip next instruction if VX == VY
+            if (c8->V[(opcode & 0x0F00) >> 8] == c8->V[(opcode & 0x00F0) >> 4]) {
+                c8->pc += 2;
+            }
+            break;
+
         case 0x6000:
 
             // opcode 0x6XNN, set register VX to NN
             c8->V[(opcode & 0x0F00) >> 8] = opcode & 0x00FF;
+            break;
+
+        case 0x7000:
+
+            // opcode 0x7XNN, add NN to register VX
+            c8->V[(opcode & 0x0F00) >> 8] += opcode & 0x00FF;
+            break;
+
+        case 0x8000:
+
+            switch (opcode & 0x000F) {
+
+            case 0x0000:
+
+                // opcode 0x8XY0, set VX to VY
+                c8->V[(opcode & 0x0F00) >> 8] = c8->V[(opcode & 0x00F0) >> 4];
+                break;
+
+            case 0x0001:
+
+                // opcode 0x8XY1, set VX to VX OR VY
+                c8->V[(opcode & 0x0F00) >> 8] |= c8->V[(opcode & 0x00F0) >> 4];
+                break;
+
+            case 0x0002:
+
+                // opcode 0x8XY2, set VX to VX AND VY
+                c8->V[(opcode & 0x0F00) >> 8] &= c8->V[(opcode & 0x00F0) >> 4];
+                break;
+
+            case 0x0003:
+
+                // opcode 0x8XY3, set VX to VX XOR VY
+                c8->V[(opcode & 0x0F00) >> 8] ^= c8->V[(opcode & 0x00F0) >> 4];
+                break;
+
+            case 0x0004:
+
+                // opcode 0x8XY4, add VY to VX, set VF to 1 if overflow, else 0
+                {
+                    size_t x = (opcode & 0x0F00) >> 8;
+                    size_t y = (opcode & 0x00F0) >> 4;
+                    char overflow = (c8->V[x] + c8->V[y]) > 0xFF;
+                    c8->V[x] += c8->V[y];
+                    c8->V[0xF] = overflow;
+                }
+                break;
+
+            case 0x0005:
+
+                // opcode 0x8XY5, set VX to VX - VY, set VF to 0 if underflow, else 1
+                {
+                    size_t x = (opcode & 0x0F00) >> 8;
+                    size_t y = (opcode & 0x00F0) >> 4;
+                    char underflow = c8->V[x] < c8->V[y]; // todo: correct?
+                    c8->V[x] -= c8->V[y];
+                    c8->V[0xF] = underflow;
+                }
+                break;
+
+            case 0x0006:
+
+                // opcode 0x8XY6, shift VX right by 1
+                // set VF to least significant bit of VX before shift
+                {
+                    size_t x = (opcode & 0x0F00) >> 8;
+                    size_t y = (opcode & 0x00F0) >> 4;
+                    c8->V[x] = c8->V[y];
+                    char overflow = c8->V[x] & 0x1;
+                    c8->V[x] >>= 1;
+                    c8->V[0xF] = overflow;
+                }
+                break;
+
+            case 0x0007:
+
+                // opcode 0x8XY7, set VX to VY - VX, set VF to 0 if underflow, else 1
+                {
+                    size_t x = (opcode & 0x0F00) >> 8;
+                    size_t y = (opcode & 0x00F0) >> 4;
+                    char underflow = c8->V[y] < c8->V[x]; // todo: correct?
+                    c8->V[x] = c8->V[y] - c8->V[x];
+                    c8->V[0xF] = underflow;
+                }
+                break;
+
+            case 0x000E:
+
+                // opcode 0x8XYE, set VX to VX << 1,
+                // set VF to most significant bit of VX before shift
+                {
+                    size_t x = (opcode & 0x0F00) >> 8;
+                    size_t y = (opcode & 0x00F0) >> 4;
+                    c8->V[x] = c8->V[y];
+                    char overflow = (c8->V[x] & 0x80) >> 7;
+                    c8->V[x] <<= 1;
+                    c8->V[0xF] = overflow;
+                }
+                break;
+
+            default:
+                printf("Unknown opcode: 0x%04X\n", opcode);
+                exit(1);
+                break;
+            }
+
+            break;
+
+        case 0x9000:
+
+            // opcode 0x9XY0, skip next instruction if VX != VY
+            if (c8->V[(opcode & 0x0F00) >> 8] != c8->V[(opcode & 0x00F0) >> 4]) {
+                c8->pc += 2;
+            }
             break;
 
         case 0xA000:
@@ -176,6 +372,55 @@ void chip8_emulate_instructions(struct Chip8* c8, int instr_count)
                 opcode & 0x000F);
             break;
 
+        case 0xF000:
+
+            switch (opcode & 0x00FF) {
+
+            case 0x001E:
+
+                // opcode 0xFX1E, add VX to I
+                c8->I += c8->V[(opcode & 0x0F00) >> 8];
+                break;
+
+            case 0x0033:
+
+                // opcode 0xFX33, store digits of VX in memory at addresses I, I+1, I+2
+                {
+                    uint8_t val = c8->V[(opcode & 0x0F00) >> 8];
+                    c8->mem[c8->I] = val / 100;
+                    c8->mem[c8->I + 1] = (val / 10) % 10;
+                    c8->mem[c8->I + 2] = val % 10;
+                }
+                break;
+
+            case 0x0055:
+
+                // opcode 0xFX55, store registers V0 to VX in memory starting at address I
+                {
+                    size_t x = (opcode & 0x0F00) >> 8;
+                    memcpy(&c8->mem[c8->I], c8->V, x + 1);
+                    c8->I += x + 1;
+                }
+                break;
+
+            case 0x0065:
+
+                // opcode 0xFX65, read registers V0 to VX from memory starting at address I
+                {
+                    size_t x = (opcode & 0x0F00) >> 8;
+                    memcpy(c8->V, &c8->mem[c8->I], x + 1);
+                    c8->I += x + 1;
+                }
+                break;
+
+            default:
+                printf("Unknown opcode: 0x%04X\n", opcode);
+                exit(1);
+                break;
+            }
+
+            break;
+
         default:
             printf("Unknown opcode: 0x%04X\n", opcode);
             exit(1);
@@ -183,6 +428,10 @@ void chip8_emulate_instructions(struct Chip8* c8, int instr_count)
         }
     }
 }
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// miscellaneous functions
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 void draw_frame_to_window(uint8_t* gfx)
 {
@@ -199,6 +448,10 @@ void draw_frame_to_window(uint8_t* gfx)
 
     EndDrawing();
 }
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// main interpreter loop
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 int main(int argc, char** argv)
 {
