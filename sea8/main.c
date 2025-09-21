@@ -137,8 +137,24 @@ void chip8_init(struct Chip8* chip8, const char* rom_path)
 
 void chip8_handle_input(struct Chip8* chip8)
 {
-    // TODO
     memcpy(chip8->prev_keys, chip8->keys, sizeof(chip8->keys));
+
+    chip8->keys[0x0] = IsKeyDown(KEY_X);
+    chip8->keys[0x1] = IsKeyDown(KEY_ONE);
+    chip8->keys[0x2] = IsKeyDown(KEY_TWO);
+    chip8->keys[0x3] = IsKeyDown(KEY_THREE);
+    chip8->keys[0x4] = IsKeyDown(KEY_Q);
+    chip8->keys[0x5] = IsKeyDown(KEY_W);
+    chip8->keys[0x6] = IsKeyDown(KEY_E);
+    chip8->keys[0x7] = IsKeyDown(KEY_A);
+    chip8->keys[0x8] = IsKeyDown(KEY_S);
+    chip8->keys[0x9] = IsKeyDown(KEY_D);
+    chip8->keys[0xA] = IsKeyDown(KEY_Z);
+    chip8->keys[0xB] = IsKeyDown(KEY_C);
+    chip8->keys[0xC] = IsKeyDown(KEY_FOUR);
+    chip8->keys[0xD] = IsKeyDown(KEY_R);
+    chip8->keys[0xE] = IsKeyDown(KEY_F);
+    chip8->keys[0xF] = IsKeyDown(KEY_V);
 }
 
 void chip8_update_timers(struct Chip8* chip8)
@@ -158,14 +174,33 @@ void chip8_draw_sprite(struct Chip8* c8, uint8_t x, uint8_t y, uint8_t n)
     uint8_t max_rows = n < SCREEN_HEIGHT - y ? n : SCREEN_HEIGHT - y; // mostly 1
     uint8_t max_cols = 8 < SCREEN_WIDTH - x ? 8 : SCREEN_WIDTH - x; // mostly 8
 
-    for (uint8_t row = 0; row < max_rows; ++row) {
-        size_t y_coord = (y + row) * SCREEN_WIDTH + x;
-        uint8_t sprite_byte = c8->mem[c8->I + row];
+    if (max_rows == 1 && max_cols == 8) {
 
-        for (uint8_t bit = 0; bit < max_cols; ++bit) {
-            if ((sprite_byte & (0x80 >> bit)) != 0) {
-                c8->V[0xF] |= c8->gfx[y_coord + bit];
+        // no row loop and explicit range (0..8) for better compiler optimization
+        size_t y_coord = y * SCREEN_WIDTH + x;
+        uint8_t sprite_byte = c8->mem[c8->I];
+
+        for (uint8_t bit = 0; bit < 8; ++bit) {
+            if (sprite_byte & (0x80 >> bit)) {
+                if (c8->V[0xF] == 0) {
+                    c8->V[0xF] |= c8->gfx[y_coord + bit];
+                }
                 c8->gfx[y_coord + bit] ^= 1;
+            }
+        }
+
+    } else {
+
+        // as above, but not unrolled and max_cols unknown at compile time
+        for (uint8_t row = 0; row < max_rows; ++row) {
+            size_t y_coord = (y + row) * SCREEN_WIDTH + x;
+            uint8_t sprite_byte = c8->mem[c8->I + row];
+
+            for (uint8_t bit = 0; bit < max_cols; ++bit) {
+                if (sprite_byte & (0x80 >> bit)) {
+                    c8->V[0xF] |= c8->gfx[y_coord + bit];
+                    c8->gfx[y_coord + bit] ^= 1;
+                }
             }
         }
     }
@@ -179,29 +214,28 @@ void chip8_emulate_instructions(struct Chip8* c8, int instr_count)
 
         switch (opcode & 0xF000) {
 
-        case 0x0000:
+        case 0x7000:
 
-            switch (opcode & 0x00FF) {
+            // opcode 0x7XNN, add NN to register VX
+            c8->V[(opcode & 0x0F00) >> 8] += opcode & 0x00FF;
+            break;
 
-            case 0x00E0:
+        case 0x4000:
 
-                // opcode 0x00E0, clear the display
-                memset(c8->gfx, 0, sizeof(c8->gfx));
-                break;
-
-            case 0x00EE:
-
-                // opcode 0x00EE, return from subroutine
-                c8->pc = stack_pop(&c8->stack);
-                break;
-
-            default:
-
-                printf("Unknown opcode: 0x%04X\n", opcode);
-                exit(1);
-                break;
+            // opcode 0x4XNN, skip next instruction if VX != NN
+            if (c8->V[(opcode & 0x0F00) >> 8] != (opcode & 0x00FF)) {
+                c8->pc += 2;
             }
+            break;
 
+        case 0xD000:
+
+            // opcode 0xDXYN, draw sprite at coordinate (VX, VY) with height N
+            chip8_draw_sprite(
+                c8,
+                c8->V[(opcode & 0x0F00) >> 8] & (SCREEN_WIDTH - 1),
+                c8->V[(opcode & 0x00F0) >> 4] & (SCREEN_HEIGHT - 1),
+                opcode & 0x000F);
             break;
 
         case 0x1000:
@@ -225,14 +259,6 @@ void chip8_emulate_instructions(struct Chip8* c8, int instr_count)
             }
             break;
 
-        case 0x4000:
-
-            // opcode 0x4XNN, skip next instruction if VX != NN
-            if (c8->V[(opcode & 0x0F00) >> 8] != (opcode & 0x00FF)) {
-                c8->pc += 2;
-            }
-            break;
-
         case 0x5000:
 
             // opcode 0x5XY0, skip next instruction if VX == VY
@@ -245,12 +271,6 @@ void chip8_emulate_instructions(struct Chip8* c8, int instr_count)
 
             // opcode 0x6XNN, set register VX to NN
             c8->V[(opcode & 0x0F00) >> 8] = opcode & 0x00FF;
-            break;
-
-        case 0x7000:
-
-            // opcode 0x7XNN, add NN to register VX
-            c8->V[(opcode & 0x0F00) >> 8] += opcode & 0x00FF;
             break;
 
         case 0x8000:
@@ -350,7 +370,6 @@ void chip8_emulate_instructions(struct Chip8* c8, int instr_count)
 
             default:
                 printf("Unknown opcode: 0x%04X\n", opcode);
-                exit(1);
                 break;
             }
 
@@ -362,6 +381,30 @@ void chip8_emulate_instructions(struct Chip8* c8, int instr_count)
             if (c8->V[(opcode & 0x0F00) >> 8] != c8->V[(opcode & 0x00F0) >> 4]) {
                 c8->pc += 2;
             }
+            break;
+
+        case 0x0000:
+
+            switch (opcode & 0x00FF) {
+
+            case 0x00E0:
+
+                // opcode 0x00E0, clear the display
+                memset(c8->gfx, 0, sizeof(c8->gfx));
+                break;
+
+            case 0x00EE:
+
+                // opcode 0x00EE, return from subroutine
+                c8->pc = stack_pop(&c8->stack);
+                break;
+
+            default:
+
+                printf("Unknown opcode: 0x%04X\n", opcode);
+                break;
+            }
+
             break;
 
         case 0xA000:
@@ -382,14 +425,31 @@ void chip8_emulate_instructions(struct Chip8* c8, int instr_count)
             c8->V[(opcode & 0x0F00) >> 8] = (rand() % 256) & (opcode & 0x00FF);
             break;
 
-        case 0xD000:
+        case 0xE000:
 
-            // opcode 0xDXYN, draw sprite at coordinate (VX, VY) with height N
-            chip8_draw_sprite(
-                c8,
-                c8->V[(opcode & 0x0F00) >> 8] & (SCREEN_WIDTH - 1),
-                c8->V[(opcode & 0x00F0) >> 4] & (SCREEN_HEIGHT - 1),
-                opcode & 0x000F);
+            switch (opcode & 0x00FF) {
+
+            case 0x009E:
+
+                // opcode 0xEX9E, skip next instruction if key with value VX is pressed
+                if (c8->keys[c8->V[(opcode & 0x0F00) >> 8]]) {
+                    c8->pc += 2;
+                }
+                break;
+
+            case 0x00A1:
+
+                // opcode 0xEXA1, skip next instruction if key with value VX is not pressed
+                if (!c8->keys[c8->V[(opcode & 0x0F00) >> 8]]) {
+                    c8->pc += 2;
+                }
+                break;
+
+            default:
+                printf("Unknown opcode: 0x%04X\n", opcode);
+                break;
+            }
+
             break;
 
         case 0xF000:
@@ -402,10 +462,46 @@ void chip8_emulate_instructions(struct Chip8* c8, int instr_count)
                 c8->V[(opcode & 0x0F00) >> 8] = c8->delay_timer;
                 break;
 
+            case 0x000A:
+
+                // opcode 0xFX0A, wait for a key release, store the value in VX
+                {
+                    int key_released = 0;
+                    for (int k = 0; k < KEY_COUNT; ++k) {
+                        if (c8->prev_keys[k] && !c8->keys[k]) {
+                            c8->V[(opcode & 0x0F00) >> 8] = k;
+                            key_released = 1;
+                            break;
+                        }
+                    }
+                    if (!key_released) {
+                        c8->pc -= 2; // repeat this instruction
+                    }
+                }
+                break;
+
+            case 0x0015:
+
+                // opcode 0xFX15, set delay timer to VX
+                c8->delay_timer = c8->V[(opcode & 0x0F00) >> 8];
+                break;
+
+            case 0x0018:
+
+                // opcode 0xFX18, set sound timer to VX
+                c8->sound_timer = c8->V[(opcode & 0x0F00) >> 8];
+                break;
+
             case 0x001E:
 
                 // opcode 0xFX1E, add VX to I
                 c8->I += c8->V[(opcode & 0x0F00) >> 8];
+                break;
+
+            case 0x0029:
+
+                // opcode 0xFX29, set I to location of sprite for digit VX
+                c8->I = FONTSET_START + (c8->V[(opcode & 0x0F00) >> 8] * 5);
                 break;
 
             case 0x0033:
@@ -441,7 +537,6 @@ void chip8_emulate_instructions(struct Chip8* c8, int instr_count)
 
             default:
                 printf("Unknown opcode: 0x%04X\n", opcode);
-                exit(1);
                 break;
             }
 
@@ -449,7 +544,6 @@ void chip8_emulate_instructions(struct Chip8* c8, int instr_count)
 
         default:
             printf("Unknown opcode: 0x%04X\n", opcode);
-            exit(1);
             break;
         }
     }
