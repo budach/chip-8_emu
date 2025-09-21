@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "raylib.h"
 
@@ -128,6 +129,10 @@ void chip8_init(struct Chip8* chip8, const char* rom_path)
     chip8->I = 0;
     chip8->delay_timer = 0;
     chip8->sound_timer = 0;
+
+    // seed random number generator
+
+    srand(time(NULL));
 }
 
 void chip8_handle_input(struct Chip8* chip8)
@@ -262,18 +267,21 @@ void chip8_emulate_instructions(struct Chip8* c8, int instr_count)
 
                 // opcode 0x8XY1, set VX to VX OR VY
                 c8->V[(opcode & 0x0F00) >> 8] |= c8->V[(opcode & 0x00F0) >> 4];
+                c8->V[0xF] = 0;
                 break;
 
             case 0x0002:
 
                 // opcode 0x8XY2, set VX to VX AND VY
                 c8->V[(opcode & 0x0F00) >> 8] &= c8->V[(opcode & 0x00F0) >> 4];
+                c8->V[0xF] = 0;
                 break;
 
             case 0x0003:
 
                 // opcode 0x8XY3, set VX to VX XOR VY
                 c8->V[(opcode & 0x0F00) >> 8] ^= c8->V[(opcode & 0x00F0) >> 4];
+                c8->V[0xF] = 0;
                 break;
 
             case 0x0004:
@@ -294,9 +302,9 @@ void chip8_emulate_instructions(struct Chip8* c8, int instr_count)
                 {
                     size_t x = (opcode & 0x0F00) >> 8;
                     size_t y = (opcode & 0x00F0) >> 4;
-                    char underflow = c8->V[x] < c8->V[y]; // todo: correct?
+                    char no_underflow = c8->V[x] >= c8->V[y];
                     c8->V[x] -= c8->V[y];
-                    c8->V[0xF] = underflow;
+                    c8->V[0xF] = no_underflow;
                 }
                 break;
 
@@ -320,9 +328,9 @@ void chip8_emulate_instructions(struct Chip8* c8, int instr_count)
                 {
                     size_t x = (opcode & 0x0F00) >> 8;
                     size_t y = (opcode & 0x00F0) >> 4;
-                    char underflow = c8->V[y] < c8->V[x]; // todo: correct?
+                    char no_underflow = c8->V[y] >= c8->V[x];
                     c8->V[x] = c8->V[y] - c8->V[x];
-                    c8->V[0xF] = underflow;
+                    c8->V[0xF] = no_underflow;
                 }
                 break;
 
@@ -362,6 +370,18 @@ void chip8_emulate_instructions(struct Chip8* c8, int instr_count)
             c8->I = opcode & 0x0FFF;
             break;
 
+        case 0xB000:
+
+            // opcode 0xBNNN, jump to address NNN + V0
+            c8->pc = (opcode & 0x0FFF) + c8->V[0];
+            break;
+
+        case 0xC000:
+
+            // opcode 0xCXNN, set VX to random byte AND NN
+            c8->V[(opcode & 0x0F00) >> 8] = (rand() % 256) & (opcode & 0x00FF);
+            break;
+
         case 0xD000:
 
             // opcode 0xDXYN, draw sprite at coordinate (VX, VY) with height N
@@ -375,6 +395,12 @@ void chip8_emulate_instructions(struct Chip8* c8, int instr_count)
         case 0xF000:
 
             switch (opcode & 0x00FF) {
+
+            case 0x0007:
+
+                // opcode 0xFX07, set VX to value of delay timer
+                c8->V[(opcode & 0x0F00) >> 8] = c8->delay_timer;
+                break;
 
             case 0x001E:
 
@@ -477,7 +503,9 @@ int main(int argc, char** argv)
 
         double current_time = GetTime();
         if (current_time - last_status_update >= 2.0) { // every 2 seconds
-            snprintf(status, sizeof(status), "Sea8 | FT: %.4fms", GetFrameTime() * 1000);
+            float frame_time_ms = GetFrameTime() * 1000;
+            snprintf(status, sizeof(status), "Sea8 | FT: %.4fms | MIPS: %d",
+                frame_time_ms, (int)(INSTR_PER_FRAME * (1000 / frame_time_ms)) / 1000000);
             SetWindowTitle(status);
             last_status_update = current_time;
         }
