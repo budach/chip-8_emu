@@ -13,6 +13,3 @@ release:
 
 debug:
 	$(COMPILER) $(COMMONFLAGS) $(DEBUGFLAGS) $(FILES) -o $(EXECUTABLE) $(LDFLAGS)
-
-clean:
-	rm $(EXECUTABLE)
